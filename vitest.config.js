@@ -6,5 +6,11 @@ export default defineConfig({
     typecheck: {
       tsconfig: "./tsconfig.test.json",
     },
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "html", "lcov"],
+      include: ["src/**/*.ts"],
+      exclude: ["src/**/*.test.ts", "src/component/_generated/**"],
+    },
   },
 });

@@ -8,7 +8,12 @@
  * @module
  */
 
+import type * as accessControl from "../accessControl.js";
+import type * as cleanUp from "../cleanUp.js";
+import type * as download from "../download.js";
 import type * as lib from "../lib.js";
+import type * as queries from "../queries.js";
+import type * as upload from "../upload.js";
 
 import type {
   ApiFromModules,
@@ -18,7 +23,12 @@ import type {
 import { anyApi, componentsGeneric } from "convex/server";
 
 const fullApi: ApiFromModules<{
+  accessControl: typeof accessControl;
+  cleanUp: typeof cleanUp;
+  download: typeof download;
   lib: typeof lib;
+  queries: typeof queries;
+  upload: typeof upload;
 }> = anyApi as any;
 
 /**

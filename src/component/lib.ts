@@ -1,91 +1,46 @@
-import { v } from "convex/values";
-import { httpActionGeneric } from "convex/server";
-import {
-  action,
-  internalMutation,
-  internalQuery,
-  mutation,
-  query,
-} from "./_generated/server.js";
-import { api, internal } from "./_generated/api.js";
-import schema from "./schema.js";
+import type { Id } from "./_generated/dataModel";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 
-const commentValidator = schema.tables.comments.validator.extend({
-  _id: v.id("comments"),
-  _creationTime: v.number(),
-});
+type ReadCtx = MutationCtx | QueryCtx;
 
-export const list = query({
-  args: {
-    targetId: v.string(),
-    limit: v.optional(v.number()),
-  },
-  returns: v.array(commentValidator),
-  handler: async (ctx, args) => {
-    return await ctx.db
-      .query("comments")
-      .withIndex("targetId", (q) => q.eq("targetId", args.targetId))
-      .order("desc")
-      .take(args.limit ?? 100);
-  },
-});
+export function normalizeAccessKeys(accessKeys: string[]) {
+  return [...new Set(accessKeys.map((k) => k.trim()).filter(Boolean))];
+}
 
-export const getComment = internalQuery({
-  args: {
-    commentId: v.id("comments"),
-  },
-  returns: v.union(v.null(), commentValidator),
-  handler: async (ctx, args) => {
-    return await ctx.db.get("comments", args.commentId);
-  },
-});
-export const add = mutation({
-  args: {
-    text: v.string(),
-    userId: v.string(),
-    targetId: v.string(),
-  },
-  returns: v.id("comments"),
-  handler: async (ctx, args) => {
-    const commentId = await ctx.db.insert("comments", {
-      text: args.text,
-      userId: args.userId,
-      targetId: args.targetId,
-    });
-    return commentId;
-  },
-});
-export const updateComment = internalMutation({
-  args: {
-    commentId: v.id("comments"),
-    text: v.string(),
-  },
-  handler: async (ctx, args) => {
-    await ctx.db.patch("comments", args.commentId, { text: args.text });
-  },
-});
+export async function findFileByStorageId(
+  ctx: ReadCtx,
+  storageId: Id<"_storage">,
+) {
+  return ctx.db
+    .query("files")
+    .withIndex("by_storageId", (q) => q.eq("storageId", storageId))
+    .first();
+}
 
-export const translate = action({
-  args: {
-    commentId: v.id("comments"),
-    baseUrl: v.string(),
-  },
-  returns: v.string(),
-  handler: async (ctx, args) => {
-    const comment = (await ctx.runQuery(internal.lib.getComment, {
-      commentId: args.commentId,
-    })) as { text: string; userId: string } | null;
-    if (!comment) {
-      throw new Error("Comment not found");
-    }
-    const response = await fetch(
-      `${args.baseUrl}/api/translate?english=${encodeURIComponent(comment.text)}`,
-    );
-    const data = await response.text();
-    await ctx.runMutation(internal.lib.updateComment, {
-      commentId: args.commentId,
-      text: data,
-    });
-    return data;
-  },
-});
+/**
+ * Checks if a given access key grants access to a specific file.
+ *
+ * @param ctx - The mutation context
+ * @param args.accessKey - The access key to check
+ * @param args.storageId - The storage ID of the file to check access for
+ *
+ * @returns true if the access key grants access to the file, false otherwise
+ */
+export async function hasAccessKey(
+  ctx: ReadCtx,
+  args: { accessKey: string; storageId: Id<"_storage"> },
+) {
+  const [accessKey] = normalizeAccessKeys([args.accessKey]);
+  if (!accessKey) {
+    return false;
+  }
+
+  const access = await ctx.db
+    .query("fileAccess")
+    .withIndex("by_accessKey_and_storageId", (q) =>
+      q.eq("accessKey", accessKey).eq("storageId", args.storageId),
+    )
+    .first();
+
+  return access != null;
+}

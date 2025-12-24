@@ -1,202 +1,582 @@
 import "./App.css";
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
-import { useState } from "react";
+import type { Id } from "../convex/_generated/dataModel";
+import { useEffect, useMemo, useState } from "react";
+import { useUploadFile, type UploadMethod } from "@gilhrpenner/convex-files-control/react";
+import { DesktopLayout } from "./components/DesktopLayout";
+import { OSWindow } from "./components/OSWindow";
+import { ScreenWithDocs } from "./components/ScreenWithDocs";
+import { DocumentationPanel } from "./components/DocumentationPanel";
+import { RetroButton } from "./components/RetroButton";
+import { RetroInput, RetroSelect, RetroCheckbox } from "./components/RetroInput";
 
-// Fake blog posts (not in database)
-const blogPosts = [
-  {
-    id: "blog-post-1",
-    title: "Getting Started with Convex Components",
-    content:
-      "Convex components are a powerful way to build reusable functionality that can be shared across different applications. In this post, we'll explore how to create and use components in your Convex applications.",
-    author: "Jane Doe",
-    date: "2024-01-15",
-  },
-  {
-    id: "blog-post-2",
-    title: "Building Scalable Comment Systems",
-    content:
-      "Comments are a fundamental feature of many web applications. Learn how to build a scalable comment system using Convex components that can handle thousands of comments efficiently.",
-    author: "John Smith",
-    date: "2024-01-20",
-  },
-];
-
-function BlogPostComments({ postId }: { postId: string }) {
-  const comments = useQuery(api.example.list, { targetId: postId });
-  const addComment = useMutation(api.example.add);
-  const translateComment = useAction(api.example.translateComment);
-  const [commentText, setCommentText] = useState("");
-
-  const handleAddComment = () => {
-    if (commentText.trim()) {
-      addComment({ text: commentText, targetId: postId });
-      setCommentText("");
-    }
-  };
-
-  const handleTranslateComment = async (commentId: string) => {
-    await translateComment({ commentId });
-  };
-
-  return (
-    <div
-      style={{
-        marginTop: "1.5rem",
-        padding: "1rem",
-        border: "1px solid rgba(128, 128, 128, 0.3)",
-        borderRadius: "8px",
-      }}
-    >
-      <h4 style={{ marginTop: 0, marginBottom: "1rem" }}>
-        Comments ({comments?.length ?? 0})
-      </h4>
-      <div style={{ marginBottom: "1rem" }}>
-        <input
-          type="text"
-          value={commentText}
-          onChange={(e) => setCommentText(e.target.value)}
-          placeholder="Enter a comment"
-          style={{ marginRight: "0.5rem", padding: "0.5rem", width: "70%" }}
-          onKeyPress={(e) => e.key === "Enter" && handleAddComment()}
-        />
-        <button onClick={handleAddComment}>Add Comment</button>
-      </div>
-      <ul style={{ textAlign: "left", listStyle: "none", padding: 0 }}>
-        {comments?.map((comment) => (
-          <li
-            key={comment._id}
-            style={{
-              marginBottom: "0.5rem",
-              display: "flex",
-              alignItems: "center",
-              gap: "0.5rem",
-              padding: "0.5rem",
-              backgroundColor: "rgba(128, 128, 128, 0.1)",
-              borderRadius: "4px",
-            }}
-          >
-            <span style={{ flex: 1 }}>{comment.text}</span>
-            <button
-              onClick={() => handleTranslateComment(comment._id)}
-              style={{
-                padding: "0.25rem 0.5rem",
-                fontSize: "0.75rem",
-                backgroundColor: "#ff9800",
-                color: "white",
-                border: "none",
-                borderRadius: "4px",
-                cursor: "pointer",
-              }}
-            >
-              🏴‍☠️ Translate to Pirate Talk
-            </button>
-          </li>
-        ))}
-        {comments?.length === 0 && (
-          <li
-            style={{ color: "rgba(128, 128, 128, 0.8)", fontStyle: "italic" }}
-          >
-            No comments yet. Be the first to comment!
-          </li>
-        )}
-      </ul>
-    </div>
-  );
+function parseTimestamp(input: string): { value: number | null; error?: undefined } | { value?: undefined; error: string } {
+  if (!input) {
+    return { value: null };
+  }
+  const date = new Date(input);
+  const value = date.getTime();
+  if (Number.isNaN(value)) {
+    return { error: "Invalid date." };
+  }
+  return { value };
 }
 
 function App() {
-  // Construct the HTTP endpoint URL
-  // Replace .convex.cloud with .convex.site for HTTP endpoints
-  const convexUrl = import.meta.env.VITE_CONVEX_URL.replace(".cloud", ".site");
+  const convexSiteUrl = useMemo(
+    () => import.meta.env.VITE_CONVEX_URL.replace(".cloud", ".site"),
+    [],
+  );
+
+  const [uploadMethod, setUploadMethod] = useState<UploadMethod>("presigned");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [accessKey, setAccessKey] = useState("test_user");
+  const [expiresAt, setExpiresAt] = useState("");
+  const [uploadStatus, setUploadStatus] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const [downloadStorageId, setDownloadStorageId] = useState("");
+  const [maxUses, setMaxUses] = useState("1");
+  const [unlimitedUses, setUnlimitedUses] = useState(false);
+  const [downloadExpiresAt, setDownloadExpiresAt] = useState("");
+  const [downloadFilename, setDownloadFilename] = useState("");
+  const [downloadUrl, setDownloadUrl] = useState("");
+  const [downloadStatus, setDownloadStatus] = useState<string | null>(null);
+  const resolvedAccessKey = accessKey.trim() || "test_user";
+  const downloadUrlWithKey = downloadUrl
+    ? `${downloadUrl}&testAccessKey=${encodeURIComponent(
+        resolvedAccessKey,
+      )}`
+    : "";
+
+  const { uploadFile } = useUploadFile(api.example, {
+    http: { baseUrl: convexSiteUrl },
+  });
+  const storeCustomFile = useMutation(api.example.storeCustomFile);
+  const createDownloadUrl = useMutation(api.example.createDownloadUrl);
+
+  const componentFiles = useQuery(api.example.listComponentFiles, {});
+  const customFiles = useQuery(api.example.listCustomFiles, {});
+  const downloadGrants = useQuery(api.example.listDownloadGrants, {});
+
+  useEffect(() => {
+    if (!downloadStorageId && componentFiles && componentFiles.length > 0) {
+      setDownloadStorageId(componentFiles[0].storageId);
+    }
+  }, [componentFiles, downloadStorageId]);
+
+  const handleUpload = async () => {
+    setUploadStatus(null);
+    setDownloadStatus(null);
+    setDownloadUrl("");
+    setIsUploading(true);
+    
+    if (!selectedFile) {
+      setUploadStatus("Select a file to upload.");
+      setIsUploading(false);
+      return;
+    }
+
+    const trimmedAccessKey = accessKey.trim();
+    if (!trimmedAccessKey) {
+      setUploadStatus("Access key is required.");
+      setIsUploading(false);
+      return;
+    }
+
+    const expiresAtResult = parseTimestamp(expiresAt);
+    if (expiresAtResult.error) {
+      setUploadStatus(expiresAtResult.error);
+      setIsUploading(false);
+      return;
+    }
+
+    try {
+      const uploadResult = await uploadFile({
+        file: selectedFile,
+        accessKeys: [trimmedAccessKey],
+        expiresAt: expiresAtResult.value,
+        method: uploadMethod,
+      });
+
+      await storeCustomFile({
+        storageId: uploadResult.storageId as Id<"_storage">,
+        fileName: selectedFile.name,
+        expiresAt: uploadResult.expiresAt,
+        size: uploadResult.metadata.size,
+        sha256: uploadResult.metadata.sha256,
+        contentType: uploadResult.metadata.contentType,
+        accessKey: trimmedAccessKey,
+      });
+
+      setUploadStatus("Upload complete.");
+    } catch (error) {
+      setUploadStatus(
+        error instanceof Error ? error.message : "Upload failed.",
+      );
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleGenerateDownloadUrl = async () => {
+    setDownloadStatus(null);
+    setDownloadUrl("");
+
+    if (!downloadStorageId) {
+      setDownloadStatus("Select a storage ID.");
+      return;
+    }
+
+    const expiresAtResult = parseTimestamp(downloadExpiresAt);
+    if (expiresAtResult.error) {
+      setDownloadStatus(expiresAtResult.error);
+      return;
+    }
+
+    let maxUsesValue: number | null | undefined = undefined;
+    if (unlimitedUses) {
+      maxUsesValue = null;
+    } else {
+      const parsed = Number(maxUses);
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        setDownloadStatus("Max uses must be at least 1.");
+        return;
+      }
+      maxUsesValue = parsed;
+    }
+
+    try {
+      const result = await createDownloadUrl({
+        storageId: downloadStorageId as Id<"_storage">,
+        baseUrl: convexSiteUrl,
+        maxUses: maxUsesValue,
+        expiresAt: expiresAtResult.value,
+        filename: downloadFilename.trim() || undefined,
+      });
+      setDownloadUrl(result.downloadUrl);
+      setDownloadStatus("Download URL generated.");
+    } catch (error) {
+      setDownloadStatus(
+        error instanceof Error ? error.message : "Download URL failed.",
+      );
+    }
+  };
 
   return (
-    <>
-      <h1>Example App</h1>
-      <div className="card">
-        {blogPosts.map((post) => (
-          <div
-            key={post.id}
-            style={{
-              marginBottom: "2rem",
-              padding: "1.5rem",
-              border: "1px solid rgba(128, 128, 128, 0.3)",
-              borderRadius: "8px",
-            }}
+    <DesktopLayout>
+      <ScreenWithDocs
+        window={
+          <OSWindow
+            title="File Upload v1.0"
+            accentColor="var(--os-accent-primary)"
           >
-            <h2 style={{ marginTop: 0 }}>{post.title}</h2>
             <div
-              style={{
-                marginBottom: "0.5rem",
-                color: "rgba(128, 128, 128, 0.8)",
-                fontSize: "0.9rem",
-              }}
+              style={{ display: "flex", flexDirection: "column", gap: "16px" }}
             >
-              By {post.author} • {post.date}
-            </div>
-            <p style={{ lineHeight: "1.6", marginBottom: "1rem" }}>
-              {post.content}
-            </p>
-            <BlogPostComments postId={post.id} />
-          </div>
-        ))}
-        <div
-          style={{
-            marginTop: "1.5rem",
-            padding: "1rem",
-            backgroundColor: "rgba(128, 128, 128, 0.1)",
-            borderRadius: "8px",
-          }}
-        >
-          <h3>HTTP Endpoint Demo</h3>
-          <p style={{ fontSize: "0.9rem", marginBottom: "0.5rem" }}>
-            The component exposes an HTTP endpoint to get the latest comment:
-          </p>
-          <div
-            style={{
-              display: "flex",
-              gap: "0.5rem",
-              flexDirection: "column",
-              justifyContent: "center",
-            }}
-          >
-            {blogPosts.map((post) => {
-              const httpUrl =
-                convexUrl +
-                `/comments/last?targetId=${encodeURIComponent(post.id)}`;
-              return (
-                <a
-                  key={post.id}
-                  href={httpUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
+              <div style={{ display: "flex", gap: "16px" }}>
+                <RetroCheckbox
+                  label="Pre-signed URL"
+                  checked={uploadMethod === "presigned"}
+                  onChange={() => setUploadMethod("presigned")}
+                />
+                <RetroCheckbox
+                  label="HTTP Action"
+                  checked={uploadMethod === "http"}
+                  onChange={() => setUploadMethod("http")}
+                />
+              </div>
+
+              <div
+                style={{
+                  border: "2px dashed var(--os-border)",
+                  padding: "20px",
+                  textAlign: "center",
+                  background: "#f9f9f9",
+                }}
+              >
+                <input
+                  type="file"
+                  onChange={(event) =>
+                    setSelectedFile(event.target.files?.[0] ?? null)
+                  }
+                  style={{ fontFamily: "var(--font-display)" }}
+                />
+              </div>
+
+              <RetroInput
+                label="ACCESS KEY"
+                type="text"
+                value={accessKey}
+                placeholder="test_user"
+                onChange={(event) => setAccessKey(event.target.value)}
+              />
+
+              <RetroInput
+                label="EXPIRATION"
+                type="datetime-local"
+                value={expiresAt}
+                onChange={(event) => setExpiresAt(event.target.value)}
+              />
+
+              <RetroButton onClick={handleUpload} disabled={isUploading}>
+                {isUploading ? "UPLOADING..." : "INITIATE UPLOAD"}
+              </RetroButton>
+
+              {uploadStatus && (
+                <div
                   style={{
-                    display: "inline-block",
-                    padding: "0.5rem 1rem",
-                    backgroundColor: "#007bff",
-                    color: "white",
-                    textDecoration: "none",
-                    borderRadius: "4px",
-                    fontSize: "0.9rem",
+                    padding: "8px",
+                    background: "#eee",
+                    border: "2px solid var(--os-border)",
+                    fontFamily: "var(--font-display)",
+                    fontSize: "0.8rem",
                   }}
                 >
-                  {post.title} - HTTP Endpoint
-                </a>
-              );
-            })}
-          </div>
-          <p style={{ fontSize: "0.8rem", color: "#666", marginTop: "0.5rem" }}>
-            See <code>example/convex/http.ts</code> for the HTTP route
-            configuration
+                  STATUS: {uploadStatus}
+                </div>
+              )}
+            </div>
+          </OSWindow>
+        }
+        docs={
+          <DocumentationPanel title="Upload Methods">
+            <p style={{ marginBottom: "12px" }}>
+              Choose between two upload strategies:
+            </p>
+            
+            <p style={{ marginBottom: "8px" }}><strong>1. Pre-signed URL</strong> (Recommended)</p>
+            <p style={{ marginBottom: "8px" }}>
+              The most flexible option with the least restrictions. Requires a 3-step client-side flow:
+            </p>
+            <ol style={{ paddingLeft: "20px", marginBottom: "16px" }}>
+                <li>Request a pre-signed URL.</li>
+                <li>Upload file directly to the URL.</li>
+                <li>Submit the resulting storage ID to the server for registration.</li>
+            </ol>
+
+            <p style={{ marginBottom: "8px" }}><strong>2. HTTP Action</strong></p>
+            <p style={{ marginBottom: "16px" }}>
+              A direct server upload method. Requires CORS configuration and endpoint mounting. It offers better control by handling files and metadata directly on the server but imposes a 20MB limit per file.
+            </p>
+
+            <p style={{ marginBottom: "8px" }}><strong>Configuration</strong></p>
+            <ul style={{ paddingLeft: "20px" }}>
+                <li><strong>Access Key</strong>: A comma-separated list of identifiers (User ID, Tenant ID) required for future download authorization.</li>
+                <li><strong>Expiration</strong>: Optional timestamp. Expired files are automatically purged by a cron job.</li>
+            </ul>
+          </DocumentationPanel>
+        }
+      />
+
+      <ScreenWithDocs
+        window={
+          <OSWindow
+            title="My Documents"
+            accentColor="var(--os-accent-tertiary)"
+          >
+            {!customFiles ? (
+              <p>Scanning...</p>
+            ) : (
+              <div style={{ maxHeight: "300px", overflowY: "auto" }}>
+                {customFiles.length === 0 && <p>Directory is empty.</p>}
+                <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+                  {customFiles.map((file) => (
+                    <li
+                      key={file._id}
+                      style={{
+                        background: "#fff",
+                        border: "2px solid var(--os-border)",
+                        marginBottom: "8px",
+                        padding: "8px",
+                        fontFamily: "var(--font-display)",
+                        fontSize: "0.8rem",
+                      }}
+                    >
+                      <div style={{ fontWeight: "bold" }}>{file.fileName}</div>
+                      <div>SIZE: {file.size} bytes</div>
+                      <div>TYPE: {file.contentType ?? "unknown"}</div>
+                      <div>
+                        EXP:{" "}
+                        {file.expiresAt === null
+                          ? "NEVER"
+                          : new Date(Number(file.expiresAt)).toLocaleString()}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </OSWindow>
+        }
+        docs={
+          <DocumentationPanel title="File Registry">
+            <p style={{ marginBottom: "12px" }}>
+                Upon successful upload and registration, the component returns file metadata including <strong>SHA-256 checksum</strong>, <strong>file size</strong>, and <strong>MIME type</strong>.
+            </p>
+            <p>
+                <strong>Note:</strong> The base component does not persist this metadata internally. If your application requires this information for display or logic (as shown in this example), you must create a custom table to store it.
+            </p>
+          </DocumentationPanel>
+        }
+      />
+
+
+
+      <ScreenWithDocs
+        window={
+          <OSWindow
+            title="Download Center"
+            accentColor="var(--os-accent-secondary)"
+          >
+            <div
+              style={{ display: "flex", flexDirection: "column", gap: "16px" }}
+            >
+              <RetroSelect
+                label="TARGET FILE"
+                value={downloadStorageId}
+                onChange={(event) => setDownloadStorageId(event.target.value)}
+              >
+                <option value="">SELECT STORAGE ID</option>
+                {componentFiles?.map((file) => (
+                  <option key={file.storageId} value={file.storageId}>
+                    {file.storageId}
+                  </option>
+                ))}
+              </RetroSelect>
+
+              <div
+                style={{ display: "flex", gap: "16px", alignItems: "flex-end" }}
+              >
+                <div style={{ flex: 1 }}>
+                  <RetroInput
+                    label="MAX USES"
+                    type="number"
+                    min="1"
+                    value={maxUses}
+                    disabled={unlimitedUses}
+                    onChange={(event) => setMaxUses(event.target.value)}
+                  />
+                </div>
+                <div style={{ paddingBottom: "12px" }}>
+                  <RetroCheckbox
+                    label="UNLIMITED"
+                    checked={unlimitedUses}
+                    onChange={(event) => setUnlimitedUses(event.target.checked)}
+                  />
+                </div>
+              </div>
+
+              <RetroInput
+                label="TTL"
+                type="datetime-local"
+                value={downloadExpiresAt}
+                onChange={(event) => setDownloadExpiresAt(event.target.value)}
+              />
+
+              <RetroInput
+                label="CUSTOM FILENAME"
+                type="text"
+                value={downloadFilename}
+                placeholder="report.pdf"
+                onChange={(event) => setDownloadFilename(event.target.value)}
+              />
+
+              <RetroButton
+                variant="secondary"
+                onClick={handleGenerateDownloadUrl}
+              >
+                GENERATE LINK
+              </RetroButton>
+
+              {downloadStatus && (
+                <p
+                  style={{
+                    fontFamily: "var(--font-display)",
+                    fontSize: "0.8rem",
+                  }}
+                >
+                  {downloadStatus}
+                </p>
+              )}
+
+              {downloadUrl && (
+                <div
+                  style={{
+                    background: "#fff",
+                    border: "2px solid var(--os-border)",
+                    padding: "8px",
+                    wordBreak: "break-all",
+                    fontSize: "0.8rem",
+                    fontFamily: "monospace",
+                  }}
+                >
+                  <div style={{ marginBottom: "8px" }}>
+                    <strong>LINK:</strong>{" "}
+                    <a
+                      href={downloadUrl}
+                      target="_blank"
+                      style={{ color: "blue" }}
+                    >
+                      OPEN
+                    </a>
+                  </div>
+                  <div>
+                    <strong>TEST:</strong>{" "}
+                    <a
+                      href={downloadUrlWithKey}
+                      target="_blank"
+                      style={{ color: "blue" }}
+                    >
+                      OPEN WITH KEY
+                    </a>
+                  </div>
+                </div>
+              )}
+            </div>
+          </OSWindow>
+        }
+        docs={
+          <DocumentationPanel title="Secure Downloads">
+            <p style={{ marginBottom: "12px" }}>
+                Generate secure, temporary download links by providing a <code>storageId</code>.
+            </p>
+            
+            <p style={{ marginBottom: "8px" }}><strong>Configuration Options:</strong></p>
+            <ul style={{ paddingLeft: "20px", marginBottom: "16px" }}>
+                <li><strong>Max Uses</strong>: Default is <code>1</code>. Set to <code>null</code> for unlimited downloads.</li>
+                <li><strong>TTL (Time to Live)</strong>: Default is <code>0</code> (no expiration).</li>
+                <li><strong>Filename</strong>: Optional. Renames the file upon download.</li>
+            </ul>
+
+            <p style={{ marginBottom: "12px" }}>
+                <strong>Note on Security:</strong> You do NOT need to provide an access key to generate the link. The component validates the access key internally when the user attempts to consume the link.
+            </p>
+
+            <p>
+                <strong>Proxy Architecture:</strong> The download is fully proxied through your Convex HTTP action. The underlying storage URL (which has no expiration or access control) is consumed server-side and <strong>never exposed</strong> to the end user.
+            </p>
+          </DocumentationPanel>
+        }
+      />
+
+      <ScreenWithDocs
+        window={<OSWindow title="Active Grants" accentColor="#a0a0a0">
+          {!downloadGrants ? (
+            <p>Loading...</p>
+          ) : (
+            <div style={{ maxHeight: "300px", overflowY: "auto" }}>
+              {downloadGrants.length === 0 && <p>No active grants.</p>}
+              <ul style={{ listStyle: "none", padding: 0 }}>
+                {downloadGrants.map((grant) => {
+                  const baseUrl = `${convexSiteUrl}/files/download?token=${encodeURIComponent(
+                    grant._id,
+                  )}`;
+                  return (
+                    <li
+                      key={grant._id}
+                      style={{
+                        background: "#eee",
+                        border: "2px solid var(--os-border)",
+                        marginBottom: "8px",
+                        padding: "8px",
+                        fontSize: "0.75rem",
+                        fontFamily: "var(--font-display)",
+                      }}
+                    >
+                      <div style={{ marginBottom: "4px" }}>
+                        <strong>ID:</strong> {grant._id.substring(0, 15)}...
+                      </div>
+                      <div>
+                        <strong>USES:</strong> {grant.useCount} /{" "}
+                        {grant.maxUses === null ? "∞" : grant.maxUses}
+                      </div>
+                      <div>
+                        <strong>EXP:</strong>{" "}
+                        {grant.expiresAt === null
+                          ? "NEVER"
+                          : new Date(Number(grant.expiresAt)).toLocaleString()}
+                      </div>
+                      <div
+                        style={{
+                          marginTop: "8px",
+                          wordBreak: "break-all",
+                          fontFamily: "monospace",
+                          fontSize: "0.7rem",
+                        }}
+                      >
+                        <div style={{ marginBottom: "12px" }}>
+                          <a
+                            href={`${baseUrl}&testAccessKey=${encodeURIComponent(
+                              resolvedAccessKey,
+                            )}`}
+                            target="_blank"
+                            style={{ color: "blue" }}
+                          >
+                            {`${baseUrl}&testAccessKey=${encodeURIComponent(
+                              resolvedAccessKey,
+                            )}`}
+                          </a>
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+        </OSWindow>}
+        docs={
+            <DocumentationPanel title="Grant Monitoring">
+            <p style={{ marginBottom: "12px" }}>
+                Live view of active download grants.
+            </p>
+            
+            <p style={{ marginBottom: "12px" }}>
+                <strong>Validation & Lifecycle:</strong>
+                Every download attempt is validated against the grant's <code>maxUses</code> and <code>expiresAt</code> limits. 
+                If a limit is reached, access is strictly denied. A cron job implemented in your app should purge expired or exhausted grants by calling the cleanup function.
+            </p>
+
+            <p style={{ marginBottom: "8px" }}><strong>Development Note:</strong></p>
+            <p>
+                In this demo, you see a <code>testAccessKey</code> in the URL query parameters. This simulates the access key that would normally be resolved securely from your user's authenticated session (e.g., User ID, Tenant ID) in a production application.
+            </p>
+          </DocumentationPanel>
+        }
+      />
+      <div style={{ marginTop: "20px" }}>
+
+        
+        <DocumentationPanel title="Additional Primitives">
+          <p style={{ marginBottom: "16px" }}>
+              The <code>convex-files-control</code> component provides additional primitives for granular control that are not shown in this demo:
           </p>
-        </div>
-        <p>
-          See <code>example/convex/example.ts</code> for all the ways to use
-          this component
-        </p>
+
+          <h4 style={{ marginBottom: "8px", fontFamily: "var(--font-display)" }}>File Management</h4>
+          <ul style={{ paddingLeft: "20px", marginBottom: "16px" }}>
+              <li><code>deleteFile(storageId)</code>: Manually delete a file and its metadata.</li>
+              <li><code>updateFileExpiration(storageId, expiresAt)</code>: Specific expiration override.</li>
+          </ul>
+
+          <h4 style={{ marginBottom: "8px", fontFamily: "var(--font-display)" }}>Access Control</h4>
+          <ul style={{ paddingLeft: "20px", marginBottom: "16px" }}>
+              <li><code>addAccessKey(storageId, accessKey)</code>: Grant specific access to a file.</li>
+              <li><code>removeAccessKey(storageId, accessKey)</code>: Revoke access.</li>
+              <li><code>hasAccessKey(storageId, accessKey)</code>: Check permission boolean.</li>
+              <li><code>listAccessKeys(storageId)</code>: View all keys for a file.</li>
+          </ul>
+
+          <h4 style={{ marginBottom: "8px", fontFamily: "var(--font-display)" }}>Querying</h4>
+          <ul style={{ paddingLeft: "20px" }}>
+              <li><code>listFiles()</code>: List all files in internal storage.</li>
+              <li><code>listFilesByAccessKey(accessKey)</code>: List files accessible by a specific key.</li>
+              <li><code>getFile(storageId)</code>: Fetch metadata for a single file.</li>
+          </ul>
+        </DocumentationPanel>
       </div>
-    </>
+    </DesktopLayout>
   );
 }
 
