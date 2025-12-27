@@ -12,6 +12,8 @@ export const downloadConsumeStatusValidator = v.union(
   v.literal("file_missing"),
   v.literal("file_expired"),
   v.literal("access_denied"),
+  v.literal("password_required"),
+  v.literal("invalid_password"),
 );
 
 export const fileMetadataValidator = v.object({
@@ -39,6 +41,7 @@ export const downloadGrantSummaryValidator = v.object({
   expiresAt: v.union(v.number(), v.null()),
   maxUses: downloadGrantFields.maxUses,
   useCount: downloadGrantFields.useCount,
+  hasPassword: v.boolean(),
 });
 
 export type FileSummary = {
@@ -53,6 +56,7 @@ export type DownloadGrantSummary = {
   expiresAt: number | null;
   maxUses: number | null;
   useCount: number;
+  hasPassword: boolean;
 };
 
 export function toFileSummary(file: Doc<"files">): FileSummary {
@@ -72,5 +76,6 @@ export function toDownloadGrantSummary(
     expiresAt: grant.expiresAt ?? null,
     maxUses: grant.maxUses ?? null,
     useCount: grant.useCount,
+    hasPassword: Boolean(grant.passwordHash),
   };
 }

@@ -73,7 +73,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
       consumeDownloadGrantForUrl: FunctionReference<
         "mutation",
         "internal",
-        { accessKey?: string; downloadToken: string },
+        { accessKey?: string; downloadToken: string; password?: string },
         {
           downloadUrl?: string;
           status:
@@ -83,7 +83,9 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             | "exhausted"
             | "file_missing"
             | "file_expired"
-            | "access_denied";
+            | "access_denied"
+            | "password_required"
+            | "invalid_password";
         },
         Name
       >;
@@ -93,6 +95,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         {
           expiresAt?: null | number;
           maxUses?: null | number;
+          password?: string;
           storageId: string;
         },
         {
@@ -161,6 +164,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
           page: Array<{
             _id: string;
             expiresAt: number | null;
+            hasPassword: boolean;
             maxUses: null | number;
             storageId: string;
             useCount: number;

@@ -8,8 +8,10 @@ import { internal } from "./_generated/api";
 import {
   findFileByStorageId,
   hasAccessKey,
+  hashPassword,
   normalizeAccessKey,
   toStorageId,
+  verifyPassword,
 } from "./lib";
 import type { Id } from "./_generated/dataModel";
 import { deleteFileCascade } from "./cleanUp";
@@ -22,6 +24,9 @@ import { downloadConsumeStatusValidator } from "./validators";
  * @param args.storageId - The file's storage ID.
  * @param args.maxUses - Maximum uses; `null` for unlimited.
  * @param args.expiresAt - Optional expiration timestamp.
+ * @param args.password - Optional password to protect the grant.
+ *
+ * Passwords are hashed with PBKDF2-SHA256 and a per-grant salt.
  * @returns The download token and grant settings.
  *
  * @example
@@ -40,6 +45,7 @@ export const createDownloadGrant = mutation({
     storageId: v.string(),
     maxUses: v.optional(v.union(v.null(), v.number())),
     expiresAt: v.optional(v.union(v.null(), v.number())),
+    password: v.optional(v.string()),
   },
   returns: v.object({
     downloadToken: v.id("downloadGrants"),
@@ -68,12 +74,29 @@ export const createDownloadGrant = mutation({
       throw new ConvexError("Expiration must be in the future.");
     }
 
+    let passwordRecord: Awaited<ReturnType<typeof hashPassword>> | null = null;
+    if (args.password !== undefined) {
+      if (args.password.trim() === "") {
+        throw new ConvexError("Password cannot be empty.");
+      }
+      passwordRecord = await hashPassword(args.password);
+    }
+
     const expiresAt = args.expiresAt ?? null;
+    const passwordFields = passwordRecord
+      ? {
+          passwordHash: passwordRecord.hash,
+          passwordSalt: passwordRecord.salt,
+          passwordIterations: passwordRecord.iterations,
+          passwordAlgorithm: passwordRecord.algorithm,
+        }
+      : {};
     const downloadToken = await ctx.db.insert("downloadGrants", {
       storageId: args.storageId,
       expiresAt: expiresAt ?? undefined,
       maxUses: maxUses ?? null,
       useCount: 0,
+      ...passwordFields,
     });
 
     return {
@@ -90,7 +113,11 @@ export const createDownloadGrant = mutation({
  *
  * @param args.downloadToken - The grant token to consume.
  * @param args.accessKey - Optional access key for authorization.
+ * @param args.password - Optional password for the grant.
  * @returns Status plus a signed download URL when status is `"ok"`.
+ *
+ * Note: if you pass passwords via query params to the HTTP download route,
+ * they can be logged or cached. Prefer headers or POST flows when possible.
  *
  * @example
  * ```ts
@@ -109,7 +136,9 @@ type DownloadConsumeUrlResult = {
     | "exhausted"
     | "file_missing"
     | "file_expired"
-    | "access_denied";
+    | "access_denied"
+    | "password_required"
+    | "invalid_password";
   downloadUrl?: string;
 };
 
@@ -117,6 +146,7 @@ export const consumeDownloadGrantForUrl = mutation({
   args: {
     downloadToken: v.id("downloadGrants"),
     accessKey: v.optional(v.string()),
+    password: v.optional(v.string()),
   },
   returns: v.object({
     status: downloadConsumeStatusValidator,
@@ -141,7 +171,9 @@ type DownloadConsumeResult =
         | "file_missing"
         | "access_denied"
         | "file_expired"
-        | "exhausted";
+        | "exhausted"
+        | "password_required"
+        | "invalid_password";
     };
 
 async function consumeDownloadGrantCore(
@@ -149,6 +181,7 @@ async function consumeDownloadGrantCore(
   args: {
     downloadToken: Id<"downloadGrants">;
     accessKey?: string;
+    password?: string;
   },
 ): Promise<DownloadConsumeResult> {
   const now = Date.now();
@@ -195,6 +228,23 @@ async function consumeDownloadGrantCore(
 
   if (!hasAccess) {
     return { status: "access_denied" };
+  }
+
+  if (grant.passwordHash) {
+    const password = args.password;
+    if (!password || password.trim() === "") {
+      return { status: "password_required" };
+    }
+
+    const validPassword = await verifyPassword(password, {
+      hash: grant.passwordHash,
+      salt: grant.passwordSalt ?? "",
+      iterations: grant.passwordIterations ?? 0,
+      algorithm: grant.passwordAlgorithm,
+    });
+    if (!validPassword) {
+      return { status: "invalid_password" };
+    }
   }
 
   if (file.expiresAt !== undefined && file.expiresAt <= now) {

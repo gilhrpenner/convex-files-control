@@ -72,14 +72,24 @@ export function sanitizeFilename(value: string | null): string {
 }
 
 export function statusCodeForDownloadError(
-  status: "expired" | "exhausted" | "file_expired" | "access_denied" | string,
+  status:
+    | "expired"
+    | "exhausted"
+    | "file_expired"
+    | "access_denied"
+    | "password_required"
+    | "invalid_password"
+    | string,
 ): number {
   switch (status) {
     case "expired":
     case "exhausted":
     case "file_expired":
       return 410;
+    case "password_required":
+      return 401;
     case "access_denied":
+    case "invalid_password":
       return 403;
     default:
       return 404;

@@ -23,6 +23,10 @@ export default defineSchema({
     expiresAt: v.optional(v.number()),
     maxUses: v.union(v.null(), v.number()),
     useCount: v.number(),
+    passwordHash: v.optional(v.string()),
+    passwordSalt: v.optional(v.string()),
+    passwordIterations: v.optional(v.number()),
+    passwordAlgorithm: v.optional(v.string()),
   })
     .index("by_storageId", ["storageId"])
     .index("by_expiresAt", ["expiresAt"]),
