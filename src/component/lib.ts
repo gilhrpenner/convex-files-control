@@ -3,34 +3,38 @@ import type { MutationCtx, QueryCtx } from "./_generated/server";
 
 type ReadCtx = MutationCtx | QueryCtx;
 
-export function normalizeAccessKeys(accessKeys: string[]) {
-  return [...new Set(accessKeys.map((k) => k.trim()).filter(Boolean))];
+export function normalizeAccessKey(accessKey?: string | null) {
+  if (typeof accessKey !== "string") {
+    return null;
+  }
+
+  const trimmed = accessKey.trim();
+  return trimmed === "" ? null : trimmed;
 }
 
-export async function findFileByStorageId(
-  ctx: ReadCtx,
-  storageId: Id<"_storage">,
-) {
+export function normalizeAccessKeys(accessKeys: string[]) {
+  const normalized = accessKeys
+    .map((key) => normalizeAccessKey(key))
+    .filter((key): key is string => key != null);
+  return [...new Set(normalized)];
+}
+
+export function toStorageId(storageId: string) {
+  return storageId as Id<"_storage">;
+}
+
+export async function findFileByStorageId(ctx: ReadCtx, storageId: string) {
   return ctx.db
     .query("files")
     .withIndex("by_storageId", (q) => q.eq("storageId", storageId))
     .first();
 }
 
-/**
- * Checks if a given access key grants access to a specific file.
- *
- * @param ctx - The mutation context
- * @param args.accessKey - The access key to check
- * @param args.storageId - The storage ID of the file to check access for
- *
- * @returns true if the access key grants access to the file, false otherwise
- */
 export async function hasAccessKey(
   ctx: ReadCtx,
-  args: { accessKey: string; storageId: Id<"_storage"> },
+  args: { accessKey: string; storageId: string },
 ) {
-  const [accessKey] = normalizeAccessKeys([args.accessKey]);
+  const accessKey = normalizeAccessKey(args.accessKey);
   if (!accessKey) {
     return false;
   }

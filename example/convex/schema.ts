@@ -3,7 +3,7 @@ import { v } from "convex/values";
 
 export default defineSchema({
   customFiles: defineTable({
-    storageId: v.id("_storage"),
+    storageId: v.string(),
     fileName: v.string(),
     expiresAt: v.union(v.null(), v.number()),
     size: v.number(),

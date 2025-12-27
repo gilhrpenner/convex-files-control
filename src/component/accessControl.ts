@@ -1,26 +1,35 @@
 import { ConvexError, v } from "convex/values";
 import { mutation } from "./_generated/server";
-import { findFileByStorageId, normalizeAccessKeys } from "./lib";
+import { findFileByStorageId, normalizeAccessKey } from "./lib";
 
 /**
- * Adds an access key to an existing file.
+ * Add an access key to a file, enabling access for a user or tenant.
  *
- * @param args.storageId - The storage ID of the file
- * @param args.accessKey - The access key to add
+ * The key is normalized (trimmed). Fails if the file does not exist or the
+ * key is already attached to the file.
  *
- * @returns The added access key
- * @throws Error if the file is not found or access key already exists
+ * @param args.storageId - The file's storage ID.
+ * @param args.accessKey - The access key to grant.
+ * @returns The normalized access key.
+ *
+ * @example
+ * ```ts
+ * await ctx.runMutation(components.convexFilesControl.accessControl.addAccessKey, {
+ *   storageId,
+ *   accessKey: "user_123",
+ * });
+ * ```
  */
 export const addAccessKey = mutation({
   args: {
-    storageId: v.id("_storage"),
+    storageId: v.string(),
     accessKey: v.string(),
   },
   returns: v.object({
     accessKey: v.string(),
   }),
   handler: async (ctx, args) => {
-    const [accessKey] = normalizeAccessKeys([args.accessKey]);
+    const accessKey = normalizeAccessKey(args.accessKey);
     if (!accessKey) {
       throw new ConvexError("Access key cannot be empty.");
     }
@@ -44,6 +53,7 @@ export const addAccessKey = mutation({
     }
 
     await ctx.db.insert("fileAccess", {
+      fileId: file._id,
       storageId: args.storageId,
       accessKey,
     });
@@ -53,24 +63,32 @@ export const addAccessKey = mutation({
 });
 
 /**
- * Removes an access key from a file.
+ * Remove an access key from a file.
  *
- * @param args.storageId - The storage ID of the file
- * @param args.accessKey - The access key to remove
+ * The final remaining access key cannot be removed to avoid orphaning access.
  *
- * @returns Success status
- * @throws Error if the file is not found or access key doesn't exist
+ * @param args.storageId - The file's storage ID.
+ * @param args.accessKey - The access key to revoke.
+ * @returns `{ removed: true }` when the key is deleted.
+ *
+ * @example
+ * ```ts
+ * await ctx.runMutation(components.convexFilesControl.accessControl.removeAccessKey, {
+ *   storageId,
+ *   accessKey: "user_123",
+ * });
+ * ```
  */
 export const removeAccessKey = mutation({
   args: {
-    storageId: v.id("_storage"),
+    storageId: v.string(),
     accessKey: v.string(),
   },
   returns: v.object({
     removed: v.boolean(),
   }),
   handler: async (ctx, args) => {
-    const [accessKey] = normalizeAccessKeys([args.accessKey]);
+    const accessKey = normalizeAccessKey(args.accessKey);
     if (!accessKey) {
       throw new ConvexError("Access key cannot be empty.");
     }
@@ -109,17 +127,23 @@ export const removeAccessKey = mutation({
 });
 
 /**
- * Updates the expiration date of a file.
+ * Set or clear a file expiration timestamp.
  *
- * @param args.storageId - The storage ID of the file
- * @param args.expiresAt - New expiration timestamp (null for never expires)
+ * @param args.storageId - The file's storage ID.
+ * @param args.expiresAt - A future timestamp or `null` to remove expiration.
+ * @returns The new expiration value.
  *
- * @returns The updated expiration date
- * @throws Error if the file is not found or expiresAt is in the past
+ * @example
+ * ```ts
+ * await ctx.runMutation(components.convexFilesControl.accessControl.updateFileExpiration, {
+ *   storageId,
+ *   expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+ * });
+ * ```
  */
 export const updateFileExpiration = mutation({
   args: {
-    storageId: v.id("_storage"),
+    storageId: v.string(),
     expiresAt: v.union(v.null(), v.number()),
   },
   returns: v.object({

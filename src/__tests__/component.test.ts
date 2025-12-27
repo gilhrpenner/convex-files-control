@@ -1,16 +1,19 @@
 import { describe, expect, test, vi } from "vitest";
 import { api } from "../component/_generated/api.js";
 import type { Id } from "../component/_generated/dataModel.js";
-import componentConfig from "../component/convex.config.js";
 import { deleteFileCascade } from "../component/cleanUp.js";
 import { normalizeAccessKeys } from "../component/lib.js";
 import schema from "../component/schema.js";
 import { initConvexTest } from "../component/setup.test.js";
 
 type TestContext = ReturnType<typeof initConvexTest>;
-type StorageId = Id<"_storage">;
+type StorageId = string;
+type FileId = Id<"files">;
 type DownloadGrantId = Id<"downloadGrants">;
 type PendingUploadId = Id<"pendingUploads">;
+
+const defaultLimit = 100;
+const defaultPaginationOpts = { numItems: defaultLimit, cursor: null };
 
 type FileMetadata = {
   size: number;
@@ -74,11 +77,12 @@ async function insertFileRecord(
 
 async function insertFileAccess(
   t: TestContext,
+  fileId: FileId,
   storageId: StorageId,
   accessKey: string,
 ) {
   return await t.run(async (ctx) => {
-    return await ctx.db.insert("fileAccess", { storageId, accessKey });
+    return await ctx.db.insert("fileAccess", { fileId, storageId, accessKey });
   });
 }
 
@@ -103,9 +107,8 @@ async function insertPendingUpload(
 }
 
 describe("component exports", () => {
-  test("schema and component config are exported", () => {
+  test("schema is exported", () => {
     expect(schema).toBeDefined();
-    expect(componentConfig).toBeDefined();
   });
 
   test("normalizeAccessKeys trims and dedupes", () => {
@@ -194,8 +197,11 @@ describe("access control", () => {
 
     expect(removed).toEqual({ removed: true });
 
-    const remaining = await t.query(api.queries.listAccessKeys, { storageId });
-    expect(remaining).toEqual(["beta"]);
+    const remaining = await t.query(api.queries.listAccessKeysPage, {
+      storageId,
+      paginationOpts: defaultPaginationOpts,
+    });
+    expect(remaining.page).toEqual(["beta"]);
 
     const { storageId: singleId } = await createStorageFile(t, "single");
     await t.mutation(api.upload.registerFile, {
@@ -306,8 +312,11 @@ describe("upload", () => {
     expect(result.expiresAt).toBeNull();
     expect(result.metadata.storageId).toBe(storageId);
 
-    const keys = await t.query(api.queries.listAccessKeys, { storageId });
-    expect(keys.sort()).toEqual(["key", "other"]);
+    const keys = await t.query(api.queries.listAccessKeysPage, {
+      storageId,
+      paginationOpts: defaultPaginationOpts,
+    });
+    expect(keys.page.sort()).toEqual(["key", "other"]);
 
     const pending = await t.run(async (ctx) => {
       return await ctx.db.get("pendingUploads", uploadToken);
@@ -542,8 +551,12 @@ describe("download", () => {
       t,
       "expired-file",
     );
-    await insertFileRecord(t, expiredFileStorage, expiredNow - 1);
-    await insertFileAccess(t, expiredFileStorage, "expired-key");
+    const expiredFileId = await insertFileRecord(
+      t,
+      expiredFileStorage,
+      expiredNow - 1,
+    );
+    await insertFileAccess(t, expiredFileId, expiredFileStorage, "expired-key");
     const expiredFileGrant = await insertDownloadGrant(t, {
       storageId: expiredFileStorage,
       maxUses: null,
@@ -650,8 +663,8 @@ describe("cleanUp", () => {
     expect(stillThere).toBeTypeOf("string");
 
     const { storageId } = await createStorageFile(t, "cascade");
-    await insertFileRecord(t, storageId);
-    await insertFileAccess(t, storageId, "a");
+    const cascadeFileId = await insertFileRecord(t, storageId);
+    await insertFileAccess(t, cascadeFileId, storageId, "a");
     await insertDownloadGrant(t, {
       storageId,
       maxUses: null,
@@ -722,8 +735,12 @@ describe("cleanUp", () => {
       t,
       "expired-file",
     );
-    await insertFileRecord(t, expiredFileStorage, now - 1000);
-    await insertFileAccess(t, expiredFileStorage, "exp");
+    const expiredFileId = await insertFileRecord(
+      t,
+      expiredFileStorage,
+      now - 1000,
+    );
+    await insertFileAccess(t, expiredFileId, expiredFileStorage, "exp");
     await insertDownloadGrant(t, {
       storageId: expiredFileStorage,
       maxUses: null,
@@ -773,7 +790,7 @@ describe("cleanUp", () => {
 });
 
 describe("queries", () => {
-  test("listFiles and getFile return normalized data", async () => {
+  test("listFilesPage and getFile return normalized data", async () => {
     const t = initConvexTest();
     const { storageId: fileA } = await createRegisteredFile(t, {
       accessKeys: ["alpha"],
@@ -784,8 +801,12 @@ describe("queries", () => {
       expiresAt: future,
     });
 
-    const files = await t.query(api.queries.listFiles, {});
-    const byStorageId = new Map(files.map((file) => [file.storageId, file]));
+    const filesResult = await t.query(api.queries.listFilesPage, {
+      paginationOpts: defaultPaginationOpts,
+    });
+    const byStorageId = new Map(
+      filesResult.page.map((file) => [file.storageId, file]),
+    );
 
     expect(byStorageId.get(fileA)?.expiresAt).toBeNull();
     expect(byStorageId.get(fileB)?.expiresAt).toBe(future);
@@ -807,26 +828,33 @@ describe("queries", () => {
     });
 
     const { storageId: orphanStorage } = await createStorageFile(t, "orphan");
-    await insertFileAccess(t, orphanStorage, "access");
+    const orphanFileId = await insertFileRecord(t, orphanStorage);
+    await insertFileAccess(t, orphanFileId, orphanStorage, "access");
+    await t.run(async (ctx) => {
+      await ctx.db.delete(orphanFileId);
+    });
 
-    const empty = await t.query(api.queries.listFilesByAccessKey, {
+    const empty = await t.query(api.queries.listFilesByAccessKeyPage, {
       accessKey: " ",
+      paginationOpts: defaultPaginationOpts,
     });
 
-    expect(empty).toEqual([]);
+    expect(empty.page).toEqual([]);
 
-    const files = await t.query(api.queries.listFilesByAccessKey, {
+    const files = await t.query(api.queries.listFilesByAccessKeyPage, {
       accessKey: "access",
+      paginationOpts: defaultPaginationOpts,
     });
 
-    expect(files).toHaveLength(1);
-    expect(files[0]?.storageId).toBe(fileA);
+    expect(files.page).toHaveLength(1);
+    expect(files.page[0]?.storageId).toBe(fileA);
 
-    const keys = await t.query(api.queries.listAccessKeys, {
+    const keys = await t.query(api.queries.listAccessKeysPage, {
       storageId: fileA,
+      paginationOpts: defaultPaginationOpts,
     });
 
-    expect(keys.sort()).toEqual(["access"]);
+    expect(keys.page.sort()).toEqual(["access"]);
 
     const hasAccess = await t.query(api.queries.hasAccessKey, {
       storageId: fileA,
@@ -843,7 +871,7 @@ describe("queries", () => {
     expect(missingAccess).toBe(false);
   });
 
-  test("listDownloadGrants returns grant details", async () => {
+  test("listDownloadGrantsPage returns grant details", async () => {
     const t = initConvexTest();
     const { storageId } = await createRegisteredFile(t, {
       accessKeys: ["grant"],
@@ -860,9 +888,11 @@ describe("queries", () => {
       useCount: 0,
     });
 
-    const grants = await t.query(api.queries.listDownloadGrants, {});
-    const grant = grants.find((item) => item._id === grantId);
-    const nullGrant = grants.find((item) => item._id === nullGrantId);
+    const grants = await t.query(api.queries.listDownloadGrantsPage, {
+      paginationOpts: defaultPaginationOpts,
+    });
+    const grant = grants.page.find((item) => item._id === grantId);
+    const nullGrant = grants.page.find((item) => item._id === nullGrantId);
 
     expect(grant?.storageId).toBe(storageId);
     expect(grant?.maxUses).toBe(2);

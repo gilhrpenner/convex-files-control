@@ -1,43 +1,49 @@
 import { ConvexError, v } from "convex/values";
-import { internalMutation, mutation, type MutationCtx } from "./_generated/server";
+import {
+  internalMutation,
+  mutation,
+  type MutationCtx,
+} from "./_generated/server";
 import { internal } from "./_generated/api";
-import { findFileByStorageId, hasAccessKey } from "./lib";
+import {
+  findFileByStorageId,
+  hasAccessKey,
+  normalizeAccessKey,
+  toStorageId,
+} from "./lib";
 import type { Id } from "./_generated/dataModel";
 import { deleteFileCascade } from "./cleanUp";
-
-const DEFAULT_MAX_DOWNLOAD_USES = 1;
-
-const downloadConsumeStatusValidator = v.union(
-  v.literal("ok"),
-  v.literal("not_found"),
-  v.literal("expired"),
-  v.literal("exhausted"),
-  v.literal("file_missing"),
-  v.literal("file_expired"),
-  v.literal("access_denied"),
-);
+import { DEFAULT_MAX_DOWNLOAD_USES } from "./constants";
+import { downloadConsumeStatusValidator } from "./validators";
 
 /**
- * Creates a download grant (token) that allows downloading a file.
- * The grant can be limited by number of uses and/or expiration time.
+ * Create a one-time (or multi-use) download token for a file.
  *
- * @param args.storageId - The storage ID of the file to grant access to
- * @param args.maxUses - Maximum number of times the grant can be consumed (default: 1, null for unlimited)
- * @param args.expiresAt - Optional expiration timestamp (must be in the future or null)
+ * @param args.storageId - The file's storage ID.
+ * @param args.maxUses - Maximum uses; `null` for unlimited.
+ * @param args.expiresAt - Optional expiration timestamp.
+ * @returns The download token and grant settings.
  *
- * @returns An object containing the downloadToken, storageId, expiration, and maxUses
+ * @example
+ * ```ts
+ * import { buildDownloadUrl } from "@gilhrpenner/convex-files-control";
  *
- * @throws Error if the file is not found, expired, or validation fails
+ * const grant = await ctx.runMutation(
+ *   components.convexFilesControl.download.createDownloadGrant,
+ *   { storageId, maxUses: 3, expiresAt: Date.now() + 10 * 60 * 1000 },
+ * );
+ * const url = buildDownloadUrl({ baseUrl, downloadToken: grant.downloadToken });
+ * ```
  */
 export const createDownloadGrant = mutation({
   args: {
-    storageId: v.id("_storage"),
+    storageId: v.string(),
     maxUses: v.optional(v.union(v.null(), v.number())),
     expiresAt: v.optional(v.union(v.null(), v.number())),
   },
   returns: v.object({
     downloadToken: v.id("downloadGrants"),
-    storageId: v.id("_storage"),
+    storageId: v.string(),
     expiresAt: v.union(v.null(), v.number()),
     maxUses: v.union(v.null(), v.number()),
   }),
@@ -80,15 +86,20 @@ export const createDownloadGrant = mutation({
 });
 
 /**
- * Consumes a download grant and returns a signed download URL if successful.
- * This is a convenience function that combines consumeDownloadGrant with getUrl.
+ * Consume a download grant and return a signed URL when allowed.
  *
- * @param args.downloadToken - The download grant token to consume
- * @param args.accessKey - Access key for verification
+ * @param args.downloadToken - The grant token to consume.
+ * @param args.accessKey - Optional access key for authorization.
+ * @returns Status plus a signed download URL when status is `"ok"`.
  *
- * @returns An object with:
- *   - status: One of "ok", "not_found", "expired", "exhausted", "file_missing", "file_expired", or "access_denied"
- *   - downloadUrl: A signed URL for downloading the file (only present if status is "ok")
+ * @example
+ * ```ts
+ * const result = await ctx.runMutation(
+ *   components.convexFilesControl.download.consumeDownloadGrantForUrl,
+ *   { downloadToken, accessKey },
+ * );
+ * if (result.status === "ok") return result.downloadUrl;
+ * ```
  */
 type DownloadConsumeUrlResult = {
   status:
@@ -116,26 +127,22 @@ export const consumeDownloadGrantForUrl = mutation({
     if (result.status !== "ok") {
       return { status: result.status };
     }
+
     return { status: "ok", downloadUrl: result.downloadUrl };
   },
 });
 
-/**
- * Core function for consuming a download grant.
- * Validates the grant, expiration, file existence, and access permissions.
- * Increments use count and deletes the grant if max uses is reached.
- *
- * @param ctx - The mutation context
- * @param args.downloadToken - The download grant token to consume
- * @param args.accessKey - Access key required to authorize the download
- *
- * @returns An object with status and optional storageId:
- *   - status: "ok" if successful, or an error status otherwise
- *   - storageId: The storage ID (only present if status is "ok")
- */
 type DownloadConsumeResult =
-  | { status: "ok"; storageId: Id<"_storage">; downloadUrl: string }
-  | { status: "not_found" | "expired" | "file_missing" | "access_denied" | "file_expired" | "exhausted" };
+  | { status: "ok"; storageId: string; downloadUrl: string }
+  | {
+      status:
+        | "not_found"
+        | "expired"
+        | "file_missing"
+        | "access_denied"
+        | "file_expired"
+        | "exhausted";
+    };
 
 async function consumeDownloadGrantCore(
   ctx: MutationCtx,
@@ -146,6 +153,7 @@ async function consumeDownloadGrantCore(
 ): Promise<DownloadConsumeResult> {
   const now = Date.now();
   const grant = await ctx.db.get("downloadGrants", args.downloadToken);
+
   if (!grant) {
     return { status: "not_found" };
   }
@@ -161,7 +169,8 @@ async function consumeDownloadGrantCore(
   }
 
   const filePromise = findFileByStorageId(ctx, grant.storageId);
-  const accessKey = args.accessKey?.trim();
+  const accessKey = normalizeAccessKey(args.accessKey);
+
   if (!accessKey) {
     const file = await filePromise;
     if (!file) {
@@ -189,12 +198,15 @@ async function consumeDownloadGrantCore(
   }
 
   if (file.expiresAt !== undefined && file.expiresAt <= now) {
-    // Schedule deletion in a separate transaction to avoid blocking
-    await ctx.scheduler.runAfter(0, internal.download.deleteFileCascadeInternal, { storageId: grant.storageId });
+    await ctx.scheduler.runAfter(
+      0,
+      internal.download.deleteFileCascadeInternal,
+      { storageId: grant.storageId },
+    );
     return { status: "file_expired" };
   }
 
-  const downloadUrl = await ctx.storage.getUrl(grant.storageId);
+  const downloadUrl = await ctx.storage.getUrl(toStorageId(grant.storageId));
   if (!downloadUrl) {
     return { status: "file_missing" };
   }
@@ -212,12 +224,13 @@ async function consumeDownloadGrantCore(
 }
 
 /**
- * Internal mutation for deferred file cascade deletion.
- * Called via scheduler.runAfter to avoid blocking the main transaction.
+ * Internal mutation to delete a file and its related records.
+ *
+ * Use via `scheduler.runAfter` to keep user-facing mutations fast.
  */
 export const deleteFileCascadeInternal = internalMutation({
   args: {
-    storageId: v.id("_storage"),
+    storageId: v.string(),
   },
   returns: v.null(),
   handler: async (ctx, args) => {

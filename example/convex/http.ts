@@ -6,9 +6,10 @@ const http = httpRouter();
 
 // Register HTTP routes for the component
 registerRoutes(http, components.convexFilesControl, {
-  pathPrefix: "/files",
+  pathPrefix: "files",
   requireAccessKey: true,
   accessKeyQueryParam: "testAccessKey",
+  enableUploadRoute: true,
 });
 
 // You can also register routes at different paths

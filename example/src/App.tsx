@@ -1,7 +1,6 @@
 import "./App.css";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
-import type { Id } from "../convex/_generated/dataModel";
 import { useEffect, useMemo, useState } from "react";
 import { useUploadFile, type UploadMethod } from "@gilhrpenner/convex-files-control/react";
 import { DesktopLayout } from "./components/DesktopLayout";
@@ -101,7 +100,7 @@ function App() {
       });
 
       await storeCustomFile({
-        storageId: uploadResult.storageId as Id<"_storage">,
+        storageId: uploadResult.storageId,
         fileName: selectedFile.name,
         expiresAt: uploadResult.expiresAt,
         size: uploadResult.metadata.size,
@@ -149,7 +148,7 @@ function App() {
 
     try {
       const result = await createDownloadUrl({
-        storageId: downloadStorageId as Id<"_storage">,
+        storageId: downloadStorageId,
         baseUrl: convexSiteUrl,
         maxUses: maxUsesValue,
         expiresAt: expiresAtResult.value,
@@ -339,7 +338,7 @@ function App() {
                 onChange={(event) => setDownloadStorageId(event.target.value)}
               >
                 <option value="">SELECT STORAGE ID</option>
-                {componentFiles?.map((file) => (
+                {componentFiles?.map((file: { storageId: string }) => (
                   <option key={file.storageId} value={file.storageId}>
                     {file.storageId}
                   </option>
@@ -469,11 +468,17 @@ function App() {
             <div style={{ maxHeight: "300px", overflowY: "auto" }}>
               {downloadGrants.length === 0 && <p>No active grants.</p>}
               <ul style={{ listStyle: "none", padding: 0 }}>
-                {downloadGrants.map((grant) => {
-                  const baseUrl = `${convexSiteUrl}/files/download?token=${encodeURIComponent(
-                    grant._id,
-                  )}`;
-                  return (
+                {downloadGrants.map(
+                  (grant: {
+                    _id: string;
+                    useCount: number;
+                    maxUses: number | null;
+                    expiresAt: number | null;
+                  }) => {
+                    const baseUrl = `${convexSiteUrl}/files/download?token=${encodeURIComponent(
+                      grant._id,
+                    )}`;
+                    return (
                     <li
                       key={grant._id}
                       style={{
@@ -565,13 +570,13 @@ function App() {
               <li><code>addAccessKey(storageId, accessKey)</code>: Grant specific access to a file.</li>
               <li><code>removeAccessKey(storageId, accessKey)</code>: Revoke access.</li>
               <li><code>hasAccessKey(storageId, accessKey)</code>: Check permission boolean.</li>
-              <li><code>listAccessKeys(storageId)</code>: View all keys for a file.</li>
+              <li><code>listAccessKeysPage(storageId, paginationOpts)</code>: View keys for a file.</li>
           </ul>
 
           <h4 style={{ marginBottom: "8px", fontFamily: "var(--font-display)" }}>Querying</h4>
           <ul style={{ paddingLeft: "20px" }}>
-              <li><code>listFiles()</code>: List all files in internal storage.</li>
-              <li><code>listFilesByAccessKey(accessKey)</code>: List files accessible by a specific key.</li>
+              <li><code>listFilesPage(paginationOpts)</code>: List files in internal storage.</li>
+              <li><code>listFilesByAccessKeyPage(accessKey, paginationOpts)</code>: List files accessible by a specific key.</li>
               <li><code>getFile(storageId)</code>: Fetch metadata for a single file.</li>
           </ul>
         </DocumentationPanel>

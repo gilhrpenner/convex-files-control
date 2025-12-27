@@ -3,6 +3,10 @@ import { components } from "./_generated/api.js";
 import { ConvexError, v } from "convex/values";
 import { buildDownloadUrl } from "@gilhrpenner/convex-files-control";
 
+const defaultLimit = 100;
+const defaultCustomFilesLimit = 100;
+const defaultPaginationOpts = { numItems: defaultLimit, cursor: null };
+
 export const generateUploadUrl = mutation({
   args: {},
   handler: async (ctx) => {
@@ -16,7 +20,7 @@ export const generateUploadUrl = mutation({
 export const finalizeUpload = mutation({
   args: {
     uploadToken: v.string(),
-    storageId: v.id("_storage"),
+    storageId: v.string(),
     accessKeys: v.array(v.string()),
     expiresAt: v.optional(v.union(v.null(), v.number())),
   },
@@ -30,7 +34,7 @@ export const finalizeUpload = mutation({
 
 export const storeCustomFile = mutation({
   args: {
-    storageId: v.id("_storage"),
+    storageId: v.string(),
     fileName: v.string(),
     expiresAt: v.union(v.null(), v.number()),
     size: v.number(),
@@ -84,10 +88,11 @@ export const listComponentFiles = query({
     }),
   ),
   handler: async (ctx) => {
-    return await ctx.runQuery(
-      components.convexFilesControl.queries.listFiles,
-      {},
+    const result = await ctx.runQuery(
+      components.convexFilesControl.queries.listFilesPage,
+      { paginationOpts: defaultPaginationOpts },
     );
+    return result.page;
   },
 });
 
@@ -96,7 +101,7 @@ export const listCustomFiles = query({
   returns: v.array(
     v.object({
       _id: v.id("customFiles"),
-      storageId: v.id("_storage"),
+      storageId: v.string(),
       fileName: v.string(),
       expiresAt: v.union(v.null(), v.number()),
       size: v.number(),
@@ -105,7 +110,10 @@ export const listCustomFiles = query({
     }),
   ),
   handler: async (ctx) => {
-    const files = await ctx.db.query("customFiles").order("desc").collect();
+    const files = await ctx.db
+      .query("customFiles")
+      .order("desc")
+      .take(defaultCustomFilesLimit);
     return files.map((file) => ({
       _id: file._id,
       storageId: file.storageId,
@@ -130,16 +138,17 @@ export const listDownloadGrants = query({
     }),
   ),
   handler: async (ctx) => {
-    return await ctx.runQuery(
-      components.convexFilesControl.queries.listDownloadGrants,
-      {},
+    const result = await ctx.runQuery(
+      components.convexFilesControl.queries.listDownloadGrantsPage,
+      { paginationOpts: defaultPaginationOpts },
     );
+    return result.page;
   },
 });
 
 export const createDownloadUrl = mutation({
   args: {
-    storageId: v.id("_storage"),
+    storageId: v.string(),
     baseUrl: v.string(),
     maxUses: v.optional(v.union(v.null(), v.number())),
     expiresAt: v.optional(v.union(v.null(), v.number())),

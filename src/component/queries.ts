@@ -1,101 +1,116 @@
+import { paginator } from "convex-helpers/server/pagination";
+import { paginationOptsValidator, paginationResultValidator } from "convex/server";
 import { v } from "convex/values";
 import { query } from "./_generated/server";
-import { hasAccessKey as hasAccessKeyForFile, normalizeAccessKeys } from "./lib";
+import { hasAccessKey as hasAccessKeyForFile, normalizeAccessKey } from "./lib";
+import schema from "./schema";
+import {
+  downloadGrantSummaryValidator,
+  fileSummaryValidator,
+  toDownloadGrantSummary,
+  toFileSummary,
+} from "./validators";
 
 /**
- * Lists all registered files.
+ * List files in storage with cursor-based pagination.
  *
- * @returns List of files with their metadata
+ * @param args.paginationOpts - Cursor pagination options.
+ * @returns A pagination result containing file summaries.
+ *
+ * @example
+ * ```ts
+ * const first = await ctx.runQuery(
+ *   components.convexFilesControl.queries.listFilesPage,
+ *   { paginationOpts: { numItems: 50, cursor: null } },
+ * );
+ * const next = await ctx.runQuery(
+ *   components.convexFilesControl.queries.listFilesPage,
+ *   { paginationOpts: { numItems: 50, cursor: first.continueCursor } },
+ * );
+ * ```
  */
-export const listFiles = query({
-  args: {},
-  returns: v.array(
-    v.object({
-      _id: v.id("files"),
-      storageId: v.id("_storage"),
-      expiresAt: v.union(v.number(), v.null()),
-    })
-  ),
-  handler: async (ctx) => {
-    const files = await ctx.db.query("files").order("desc").collect();
-    return files.map((file) => ({
-      _id: file._id,
-      storageId: file.storageId,
-      expiresAt: file.expiresAt ?? null,
-    }));
+export const listFilesPage = query({
+  args: {
+    paginationOpts: paginationOptsValidator,
+  },
+  returns: paginationResultValidator(fileSummaryValidator),
+  handler: async (ctx, args) => {
+    const rows = await paginator(ctx.db, schema)
+      .query("files")
+      .order("desc")
+      .paginate(args.paginationOpts);
+
+    return {
+      ...rows,
+      page: rows.page.map(toFileSummary),
+    };
   },
 });
 
 /**
- * Lists all files accessible by a specific access key.
+ * List files accessible by a given access key using pagination.
  *
- * @param args.accessKey - The access key to filter by
+ * @param args.accessKey - Access key to filter by.
+ * @param args.paginationOpts - Cursor pagination options.
+ * @returns A pagination result containing file summaries.
  *
- * @returns List of files accessible by the given access key
+ * @example
+ * ```ts
+ * const page = await ctx.runQuery(
+ *   components.convexFilesControl.queries.listFilesByAccessKeyPage,
+ *   { accessKey: "user_123", paginationOpts: { numItems: 25, cursor: null } },
+ * );
+ * ```
  */
-export const listFilesByAccessKey = query({
+export const listFilesByAccessKeyPage = query({
   args: {
     accessKey: v.string(),
+    paginationOpts: paginationOptsValidator,
   },
-  returns: v.array(
-    v.object({
-      _id: v.id("files"),
-      storageId: v.id("_storage"),
-      expiresAt: v.union(v.number(), v.null()),
-    })
-  ),
+  returns: paginationResultValidator(fileSummaryValidator),
   handler: async (ctx, args) => {
-    const [accessKey] = normalizeAccessKeys([args.accessKey]);
-    if (!accessKey) {
-      return [];
-    }
-
-    const accessRecords = await ctx.db
+    const accessKey = normalizeAccessKey(args.accessKey) ?? "";
+    const accessRecords = await paginator(ctx.db, schema)
       .query("fileAccess")
-      .withIndex("by_accessKey", (q) => q.eq("accessKey", accessKey))
-      .collect();
-
-    const storageIds = [...new Set(accessRecords.map((access) => access.storageId))];
-    const files = await Promise.all(
-      storageIds.map((storageId) =>
-        ctx.db
-          .query("files")
-          .withIndex("by_storageId", (q) => q.eq("storageId", storageId))
-          .first()
+      .withIndex("by_accessKey_and_storageId", (q) =>
+        q.eq("accessKey", accessKey),
       )
+      .paginate(args.paginationOpts);
+
+    const files = await Promise.all(
+      accessRecords.page.map((record) => ctx.db.get(record.fileId)),
     );
 
-    const validFiles = files.filter(
-      (f): f is NonNullable<typeof f> => f != null,
-    );
+    const page = files
+      .filter((file): file is NonNullable<typeof file> => file != null)
+      .map(toFileSummary);
 
-    return validFiles.map((file) => ({
-      _id: file._id,
-      storageId: file.storageId,
-      expiresAt: file.expiresAt ?? null,
-    }));
+    return {
+      ...accessRecords,
+      page,
+    };
   },
 });
 
 /**
- * Gets a single file's details by its storage ID.
+ * Fetch a file summary by storage ID.
  *
- * @param args.storageId - The storage ID of the file
+ * @param args.storageId - The file's storage ID.
+ * @returns The file summary or `null` if not found.
  *
- * @returns The file details, or null if not found
+ * @example
+ * ```ts
+ * const file = await ctx.runQuery(
+ *   components.convexFilesControl.queries.getFile,
+ *   { storageId },
+ * );
+ * ```
  */
 export const getFile = query({
   args: {
-    storageId: v.id("_storage"),
+    storageId: v.string(),
   },
-  returns: v.union(
-    v.object({
-      _id: v.id("files"),
-      storageId: v.id("_storage"),
-      expiresAt: v.union(v.number(), v.null()),
-    }),
-    v.null()
-  ),
+  returns: v.union(fileSummaryValidator, v.null()),
   handler: async (ctx, args) => {
     const file = await ctx.db
       .query("files")
@@ -106,75 +121,94 @@ export const getFile = query({
       return null;
     }
 
+    return toFileSummary(file);
+  },
+});
+
+/**
+ * List access keys for a file using pagination.
+ *
+ * @param args.storageId - The file's storage ID.
+ * @param args.paginationOpts - Cursor pagination options.
+ * @returns A pagination result containing access keys.
+ *
+ * @example
+ * ```ts
+ * const page = await ctx.runQuery(
+ *   components.convexFilesControl.queries.listAccessKeysPage,
+ *   { storageId, paginationOpts: { numItems: 25, cursor: null } },
+ * );
+ * ```
+ */
+export const listAccessKeysPage = query({
+  args: {
+    storageId: v.string(),
+    paginationOpts: paginationOptsValidator,
+  },
+  returns: paginationResultValidator(v.string()),
+  handler: async (ctx, args) => {
+    const rows = await paginator(ctx.db, schema)
+      .query("fileAccess")
+      .withIndex("by_storageId", (q) => q.eq("storageId", args.storageId))
+      .paginate(args.paginationOpts);
+
     return {
-      _id: file._id,
-      storageId: file.storageId,
-      expiresAt: file.expiresAt ?? null,
+      ...rows,
+      page: rows.page.map((record) => record.accessKey),
     };
   },
 });
 
 /**
- * Lists all access keys for a given file.
+ * List download grants with cursor pagination.
  *
- * @param args.storageId - The storage ID of the file
+ * @param args.paginationOpts - Cursor pagination options.
+ * @returns A pagination result containing grant summaries.
  *
- * @returns Array of access keys that grant access to this file
+ * @example
+ * ```ts
+ * const page = await ctx.runQuery(
+ *   components.convexFilesControl.queries.listDownloadGrantsPage,
+ *   { paginationOpts: { numItems: 25, cursor: null } },
+ * );
+ * ```
  */
-export const listAccessKeys = query({
+export const listDownloadGrantsPage = query({
   args: {
-    storageId: v.id("_storage"),
+    paginationOpts: paginationOptsValidator,
   },
-  returns: v.array(v.string()),
+  returns: paginationResultValidator(downloadGrantSummaryValidator),
   handler: async (ctx, args) => {
-    const accessRecords = await ctx.db
-      .query("fileAccess")
-      .withIndex("by_storageId", (q) => q.eq("storageId", args.storageId))
-      .collect();
+    const rows = await paginator(ctx.db, schema)
+      .query("downloadGrants")
+      .order("desc")
+      .paginate(args.paginationOpts);
 
-    return accessRecords.map((record) => record.accessKey);
+    return {
+      ...rows,
+      page: rows.page.map(toDownloadGrantSummary),
+    };
   },
 });
 
 /**
- * Lists all download grants.
+ * Check whether an access key grants access to a file.
  *
- * @returns List of download grants with usage and expiration info
- */
-export const listDownloadGrants = query({
-  args: {},
-  returns: v.array(
-    v.object({
-      _id: v.id("downloadGrants"),
-      storageId: v.id("_storage"),
-      expiresAt: v.union(v.number(), v.null()),
-      maxUses: v.union(v.null(), v.number()),
-      useCount: v.number(),
-    })
-  ),
-  handler: async (ctx) => {
-    const grants = await ctx.db.query("downloadGrants").order("desc").collect();
-    return grants.map((grant) => ({
-      _id: grant._id,
-      storageId: grant.storageId,
-      expiresAt: grant.expiresAt ?? null,
-      maxUses: grant.maxUses ?? null,
-      useCount: grant.useCount,
-    }));
-  },
-});
-
-/**
- * Checks whether an access key grants access to a file.
+ * @param args.storageId - The file's storage ID.
+ * @param args.accessKey - The access key to verify.
+ * @returns `true` if the key grants access.
  *
- * @param args.storageId - The storage ID of the file
- * @param args.accessKey - The access key to verify
- *
- * @returns True if the access key grants access
+ * @example
+ * ```ts
+ * const allowed = await ctx.runQuery(
+ *   components.convexFilesControl.queries.hasAccessKey,
+ *   { storageId, accessKey: "user_123" },
+ * );
+ * ```
  */
 export const hasAccessKey = query({
   args: {
-    storageId: v.id("_storage"),
+    storageId: v.string(),
     accessKey: v.string(),
   },
   returns: v.boolean(),

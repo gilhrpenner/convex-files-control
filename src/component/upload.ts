@@ -1,33 +1,26 @@
 import { ConvexError, v } from "convex/values";
 import { mutation, type MutationCtx } from "./_generated/server";
-import type { Id } from "./_generated/dataModel";
-import { findFileByStorageId, normalizeAccessKeys } from "./lib";
-
-const PENDING_UPLOAD_TTL_MS = 60 * 60 * 1000;
-const fileMetadataValidator = v.object({
-  storageId: v.id("_storage"),
-  size: v.number(),
-  sha256: v.string(),
-  contentType: v.union(v.string(), v.null()),
-});
-
-const fileMetadataInputValidator = v.object({
-  size: v.number(),
-  sha256: v.string(),
-  contentType: v.union(v.string(), v.null()),
-});
+import {
+  findFileByStorageId,
+  normalizeAccessKeys,
+  toStorageId,
+} from "./lib";
+import { PENDING_UPLOAD_TTL_MS } from "./constants";
+import {
+  fileMetadataInputValidator,
+  fileMetadataValidator,
+} from "./validators";
 
 /**
- * Generates a signed upload URL and creates a pending upload token.
+ * Start the two-step upload flow by issuing a signed upload URL.
  *
- * This is the first step in the upload flow. Clients call this to get a URL
- * where they can upload a file, along with a token that must be used to
- * finalize the upload.
+ * @returns The upload URL, a short-lived upload token, and its expiration time.
  *
- * @returns An object containing:
- *   - `uploadUrl`: The signed URL where the file can be uploaded
- *   - `uploadToken`: A token that must be used with `finalizeUpload`
- *   - `uploadTokenExpiresAt`: Timestamp when the upload token expires
+ * @example
+ * ```ts
+ * const { uploadUrl, uploadToken } =
+ *   await ctx.runMutation(components.convexFilesControl.upload.generateUploadUrl, {});
+ * ```
  */
 export const generateUploadUrl = mutation({
   args: {},
@@ -51,29 +44,33 @@ export const generateUploadUrl = mutation({
 });
 
 /**
- * Finalizes an upload by registering the file and cleaning up the upload token.
+ * Complete the upload flow by registering the uploaded file.
  *
- * This is the second step in the upload flow. After uploading a file to the URL
- * from `generateUploadUrl`, clients call this to register the file and complete
- * the upload process. The upload token is validated and then deleted.
+ * @param args.uploadToken - The token from `generateUploadUrl`.
+ * @param args.storageId - The storage ID returned by the upload endpoint.
+ * @param args.accessKeys - Access keys that can read the file.
+ * @param args.expiresAt - Optional expiration timestamp.
+ * @returns File metadata and expiration.
  *
- * @param args.uploadToken - The upload token from `generateUploadUrl`
- * @param args.storageId - The Convex storage ID of the uploaded file
- * @param args.accessKeys - Array of access keys that grant access to this file
- * @param args.expiresAt - Optional expiration timestamp (null for forever)
- *
- * @returns File registration metadata
- * @throws Error if upload token not found, expired, or file registration fails
+ * @example
+ * ```ts
+ * await ctx.runMutation(components.convexFilesControl.upload.finalizeUpload, {
+ *   uploadToken,
+ *   storageId,
+ *   accessKeys: ["user_123"],
+ *   expiresAt: null,
+ * });
+ * ```
  */
 export const finalizeUpload = mutation({
   args: {
     uploadToken: v.id("pendingUploads"),
-    storageId: v.id("_storage"),
+    storageId: v.string(),
     accessKeys: v.array(v.string()),
     expiresAt: v.optional(v.union(v.null(), v.number())),
   },
   returns: v.object({
-    storageId: v.id("_storage"),
+    storageId: v.string(),
     expiresAt: v.union(v.null(), v.number()),
     metadata: fileMetadataValidator,
   }),
@@ -97,42 +94,36 @@ export const finalizeUpload = mutation({
 });
 
 /**
- * Registers an existing storage file with access control.
+ * Register an already-uploaded storage file.
  *
- * Use this function to register files that have already been uploaded to Convex storage
- * via HTTP actions. This is different from `finalizeUpload`, which
- * is part of the two-step client upload flow that requires an upload token.
+ * This is useful when you upload via an HTTP action and want to attach access
+ * control and metadata after the upload.
  *
- * This function creates file records and access key mappings for the specified storage file.
- * It's particularly useful when uploading files via HTTP actions, where you can optionally
- * provide metadata directly instead of fetching it from storage.
- *
- * @param args.storageId - The storage ID of the file to register
- * @param args.accessKeys - Array of access keys that grant access to this file
- * @param args.expiresAt - Optional expiration timestamp (must be in the future or null)
- * @param args.metadata - Optional file metadata. If not provided, metadata is fetched from storage.
- *
- * @returns An object containing the registered file's storageId, expiration, and metadata
- * @throws Error if the file is already registered, if expiresAt is in the past, or if metadata cannot be retrieved
+ * @param args.storageId - The storage ID to register.
+ * @param args.accessKeys - Access keys that can read the file.
+ * @param args.expiresAt - Optional expiration timestamp.
+ * @param args.metadata - Optional metadata; if omitted, it is fetched from storage.
+ * @returns File metadata and expiration.
  *
  * @example
- * // In an HTTP action after uploading a file:
+ * ```ts
  * const storageId = await ctx.storage.store(fileBlob);
- * return await ctx.runMutation(api.component.upload.registerFile, {
+ * return await ctx.runMutation(components.convexFilesControl.upload.registerFile, {
  *   storageId,
  *   accessKeys: ["user_123"],
- *   metadata: { size: fileBlob.size, sha256: hash, contentType: fileBlob.type }
+ *   metadata: { size: fileBlob.size, sha256, contentType: fileBlob.type },
  * });
+ * ```
  */
 export const registerFile = mutation({
   args: {
-    storageId: v.id("_storage"),
+    storageId: v.string(),
     accessKeys: v.array(v.string()),
     expiresAt: v.optional(v.union(v.null(), v.number())),
     metadata: v.optional(fileMetadataInputValidator),
   },
   returns: v.object({
-    storageId: v.id("_storage"),
+    storageId: v.string(),
     expiresAt: v.union(v.null(), v.number()),
     metadata: fileMetadataValidator,
   }),
@@ -141,26 +132,10 @@ export const registerFile = mutation({
   },
 });
 
-/**
- * Core function that registers a file in the system with access control.
- *
- * This internal helper function performs the actual file registration logic:
- * validates access keys, existing registrations, validates expiration, fetches
- * metadata if needed, adds file records, and sets up access key associations.
- *
- * @param ctx - Mutation context
- * @param args.storageId - The Convex storage ID of the file
- * @param args.accessKeys - Array of access keys (will be normalized)
- * @param args.expiresAt - Optional expiration timestamp (null for forever)
- * @param args.metadata - Optional file metadata
- *
- * @returns File registration metadata
- * @throws Error if no access keys, file already registered, expiresAt invalid, or storage file not found
- */
 async function registerFileCore(
   ctx: MutationCtx,
   args: {
-    storageId: Id<"_storage">;
+    storageId: string;
     accessKeys: string[];
     expiresAt?: number | null;
     metadata?: {
@@ -181,7 +156,7 @@ async function registerFileCore(
 
   const [existingRegistration, systemFile] = await Promise.all([
     findFileByStorageId(ctx, args.storageId),
-    args.metadata ? null : ctx.db.system.get(args.storageId),
+    args.metadata ? null : ctx.db.system.get(toStorageId(args.storageId)),
   ]);
 
   if (existingRegistration) {
@@ -193,19 +168,20 @@ async function registerFileCore(
     throw new ConvexError("Storage file not found.");
   }
 
-  await Promise.all([
-    ctx.db.insert("files", {
-      storageId: args.storageId,
-      expiresAt: args.expiresAt ?? undefined,
-    }),
+  const fileId = await ctx.db.insert("files", {
+    storageId: args.storageId,
+    expiresAt: args.expiresAt ?? undefined,
+  });
 
-    ...accessKeys.map((accessKey) =>
+  await Promise.all(
+    accessKeys.map((accessKey) =>
       ctx.db.insert("fileAccess", {
+        fileId,
         storageId: args.storageId,
         accessKey,
       })
     ),
-  ]);
+  );
 
   return {
     storageId: args.storageId,

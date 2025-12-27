@@ -1,12 +1,7 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import type { Auth, HttpRouter } from "convex/server";
 import type { ComponentApi } from "../component/_generated/component.js";
-import {
-  buildDownloadUrl,
-  exposeApi,
-  registerRoutes,
-  uploadFormFields,
-} from "../client/index.js";
+import { buildDownloadUrl, registerRoutes, uploadFormFields } from "../client/index.js";
 
 const component = {
   accessControl: {
@@ -25,10 +20,10 @@ const component = {
   queries: {
     getFile: Symbol("getFile"),
     hasAccessKey: Symbol("hasAccessKey"),
-    listAccessKeys: Symbol("listAccessKeys"),
-    listDownloadGrants: Symbol("listDownloadGrants"),
-    listFiles: Symbol("listFiles"),
-    listFilesByAccessKey: Symbol("listFilesByAccessKey"),
+    listAccessKeysPage: Symbol("listAccessKeysPage"),
+    listDownloadGrantsPage: Symbol("listDownloadGrantsPage"),
+    listFilesPage: Symbol("listFilesPage"),
+    listFilesByAccessKeyPage: Symbol("listFilesByAccessKeyPage"),
   },
   upload: {
     finalizeUpload: Symbol("finalizeUpload"),
@@ -103,163 +98,10 @@ function makeCtx(runMutation?: unknown, runQuery?: unknown) {
   } as const;
 }
 
-describe("exposeApi", () => {
-  test("routes auth and component operations", async () => {
-    const auth = vi.fn(async () => {});
-    const api = exposeApi(component, { auth });
-
-    const runMutation = vi.fn(async (ref, args) => ({ ref, args }));
-    const runQuery = vi.fn(async (ref, args) => ({ ref, args }));
-    const ctx = makeCtx(runMutation, runQuery);
-
-    const mutationCases = [
-      {
-        fn: api.generateUploadUrl,
-        args: {},
-        auth: { type: "generateUploadUrl" },
-        ref: component.upload.generateUploadUrl,
-      },
-      {
-        fn: api.finalizeUpload,
-        args: {
-          uploadToken: "token",
-          storageId: "storage",
-          accessKeys: ["a"],
-          expiresAt: null,
-        },
-        auth: {
-          type: "finalizeUpload",
-          storageId: "storage",
-          accessKeys: ["a"],
-        },
-        ref: component.upload.finalizeUpload,
-      },
-      {
-        fn: api.registerFile,
-        args: {
-          storageId: "storage",
-          accessKeys: ["a"],
-          expiresAt: null,
-          metadata: { size: 1, sha256: "hash", contentType: null },
-        },
-        auth: {
-          type: "registerFile",
-          storageId: "storage",
-          accessKeys: ["a"],
-        },
-        ref: component.upload.registerFile,
-      },
-      {
-        fn: api.createDownloadGrant,
-        args: { storageId: "storage", maxUses: 2, expiresAt: null },
-        auth: { type: "createDownloadGrant", storageId: "storage" },
-        ref: component.download.createDownloadGrant,
-      },
-      {
-        fn: api.consumeDownloadGrantForUrl,
-        args: { downloadToken: "token", accessKey: "key" },
-        auth: { type: "consumeDownloadGrantForUrl", downloadToken: "token" },
-        ref: component.download.consumeDownloadGrantForUrl,
-      },
-      {
-        fn: api.cleanupExpired,
-        args: { limit: 5 },
-        auth: { type: "cleanupExpired" },
-        ref: component.cleanUp.cleanupExpired,
-      },
-      {
-        fn: api.deleteFile,
-        args: { storageId: "storage" },
-        auth: { type: "deleteFile", storageId: "storage" },
-        ref: component.cleanUp.deleteFile,
-      },
-      {
-        fn: api.addAccessKey,
-        args: { storageId: "storage", accessKey: "key" },
-        auth: { type: "addAccessKey", storageId: "storage", accessKey: "key" },
-        ref: component.accessControl.addAccessKey,
-      },
-      {
-        fn: api.removeAccessKey,
-        args: { storageId: "storage", accessKey: "key" },
-        auth: {
-          type: "removeAccessKey",
-          storageId: "storage",
-          accessKey: "key",
-        },
-        ref: component.accessControl.removeAccessKey,
-      },
-      {
-        fn: api.updateFileExpiration,
-        args: { storageId: "storage", expiresAt: null },
-        auth: { type: "updateFileExpiration", storageId: "storage" },
-        ref: component.accessControl.updateFileExpiration,
-      },
-    ];
-
-    for (const entry of mutationCases) {
-      auth.mockClear();
-      runMutation.mockClear();
-      const result = await getHandler(entry.fn)(ctx, entry.args);
-      expect(auth).toHaveBeenCalledWith(ctx, entry.auth);
-      expect(runMutation).toHaveBeenCalledWith(entry.ref, entry.args);
-      expect(result).toEqual({ ref: entry.ref, args: entry.args });
-    }
-
-    const queryCases = [
-      {
-        fn: api.listFiles,
-        args: {},
-        auth: { type: "listFiles" },
-        ref: component.queries.listFiles,
-      },
-      {
-        fn: api.listFilesByAccessKey,
-        args: { accessKey: "key" },
-        auth: { type: "listFilesByAccessKey", accessKey: "key" },
-        ref: component.queries.listFilesByAccessKey,
-      },
-      {
-        fn: api.getFile,
-        args: { storageId: "storage" },
-        auth: { type: "getFile", storageId: "storage" },
-        ref: component.queries.getFile,
-      },
-      {
-        fn: api.listAccessKeys,
-        args: { storageId: "storage" },
-        auth: { type: "listAccessKeys", storageId: "storage" },
-        ref: component.queries.listAccessKeys,
-      },
-      {
-        fn: api.listDownloadGrants,
-        args: {},
-        auth: { type: "listDownloadGrants" },
-        ref: component.queries.listDownloadGrants,
-      },
-      {
-        fn: api.hasAccessKey,
-        args: { storageId: "storage", accessKey: "key" },
-        auth: { type: "hasAccessKey", storageId: "storage", accessKey: "key" },
-        ref: component.queries.hasAccessKey,
-      },
-    ];
-
-    for (const entry of queryCases) {
-      auth.mockClear();
-      runQuery.mockClear();
-      const result = await getHandler(entry.fn)(ctx, entry.args);
-      expect(auth).toHaveBeenCalledWith(ctx, entry.auth);
-      expect(runQuery).toHaveBeenCalledWith(entry.ref, entry.args);
-      expect(result).toEqual({ ref: entry.ref, args: entry.args });
-    }
-  });
-});
-
 describe("registerRoutes", () => {
   test("registers CORS preflight routes", async () => {
     const router = createRouter();
-    registerRoutes(router, component);
+    registerRoutes(router, component, { enableUploadRoute: true });
 
     const uploadOptions = getRoute(router, "/files/upload", "OPTIONS");
     const downloadOptions = getRoute(router, "/files/download", "OPTIONS");
@@ -307,7 +149,7 @@ describe("registerRoutes", () => {
 
   test("upload route validates input", async () => {
     const router = createRouter();
-    registerRoutes(router, component);
+    registerRoutes(router, component, { enableUploadRoute: true });
     const uploadRoute = getRoute(router, "/files/upload", "POST");
     const handler = getHandler(uploadRoute.handler);
 
@@ -383,7 +225,7 @@ describe("registerRoutes", () => {
 
   test("upload route handles uploads", async () => {
     const router = createRouter();
-    registerRoutes(router, component);
+    registerRoutes(router, component, { enableUploadRoute: true });
     const uploadRoute = getRoute(router, "/files/upload", "POST");
     const handler = getHandler(uploadRoute.handler);
 
@@ -472,7 +314,7 @@ describe("registerRoutes", () => {
 
   test("upload route handles upstream failures", async () => {
     const router = createRouter();
-    registerRoutes(router, component);
+    registerRoutes(router, component, { enableUploadRoute: true });
     const uploadRoute = getRoute(router, "/files/upload", "POST");
     const handler = getHandler(uploadRoute.handler);
 

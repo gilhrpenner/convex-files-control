@@ -3,23 +3,15 @@
 import { useMutation } from "convex/react";
 import type { FunctionReference } from "convex/server";
 import { useCallback } from "react";
-
-const DEFAULT_PATH_PREFIX = "/files";
+import {
+  DEFAULT_PATH_PREFIX,
+  buildEndpointUrl,
+  uploadFormFields,
+} from "../shared";
+import type { UploadResult } from "../shared";
 
 export type UploadMethod = "presigned" | "http";
-
-export type UploadMetadata = {
-  storageId: string;
-  size: number;
-  sha256: string;
-  contentType: string | null;
-};
-
-export type UploadResult = {
-  storageId: string;
-  expiresAt: number | null;
-  metadata: UploadMetadata;
-};
+export type { UploadMetadata, UploadResult } from "../shared";
 
 export type HttpUploadOptions = {
   uploadUrl?: string;
@@ -46,20 +38,37 @@ export type UploadApi = {
 };
 
 function resolveUploadUrl(http?: HttpUploadOptions) {
-  if (!http) return undefined;
-  if (http.uploadUrl) return http.uploadUrl;
-  if (!http.baseUrl) return undefined;
-  const baseUrl = http.baseUrl.replace(/\/$/, "");
+  if (!http) {
+    return undefined;
+  }
+
+  if (http.uploadUrl) {
+    return http.uploadUrl;
+  }
+
+  if (!http.baseUrl) {
+    return undefined;
+  }
+
   const rawPrefix = http.pathPrefix ?? DEFAULT_PATH_PREFIX;
-  const prefix = rawPrefix.startsWith("/") ? rawPrefix : `/${rawPrefix}`;
-  return `${baseUrl}${prefix}/upload`;
+  return buildEndpointUrl(http.baseUrl, rawPrefix, "upload");
 }
 
 /**
- * Upload files to Convex storage using either pre-signed URLs or the HTTP action.
+ * Upload files from React using either a presigned URL or the HTTP route.
  *
- * This hook can be used as is, or copied into your own code for customization
- * and tighter control.
+ * @param api - Your component API references for `generateUploadUrl` and `finalizeUpload`.
+ * @param options - Default upload settings (method and HTTP config).
+ * @returns Helpers for the chosen upload method.
+ *
+ * @example
+ * ```ts
+ * import { api } from "../convex/_generated/api";
+ * import { useUploadFile } from "@gilhrpenner/convex-files-control/react";
+ *
+ * const { uploadFile } = useUploadFile(api.filesControl, { method: "presigned" });
+ * await uploadFile({ file, accessKeys: ["user_123"] });
+ * ```
  */
 export function useUploadFile<Api extends UploadApi>(
   api: Api,
@@ -113,11 +122,14 @@ export function useUploadFile<Api extends UploadApi>(
       }
 
       const formData = new FormData();
-      formData.append("file", file);
-      formData.append("accessKeys", JSON.stringify(accessKeys));
+      formData.append(uploadFormFields.file, file);
+      formData.append(
+        uploadFormFields.accessKeys,
+        JSON.stringify(accessKeys),
+      );
       if (expiresAt !== undefined) {
         formData.append(
-          "expiresAt",
+          uploadFormFields.expiresAt,
           expiresAt === null ? "null" : String(expiresAt),
         );
       }
@@ -150,9 +162,11 @@ export function useUploadFile<Api extends UploadApi>(
   const uploadFile = useCallback(
     async (args: UploadFileArgs): Promise<UploadResult> => {
       const method = args.method ?? options.method ?? "presigned";
+
       if (method === "http") {
         return await uploadViaHttpAction(args);
       }
+
       return await uploadViaPresignedUrl(args);
     },
     [options.method, uploadViaHttpAction, uploadViaPresignedUrl],

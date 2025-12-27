@@ -40,42 +40,43 @@ export default app;
 
 ### 2. Expose the API
 
-Create a file (e.g., `convex/files.ts`) to expose the component's functionality
-to your client and define your authentication logic.
+Create a file (e.g., `convex/files.ts`) with server-side wrappers that call into
+the component. Only export the functions you actually want callable from the client.
 
 ```typescript
 // convex/files.ts
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation } from "./_generated/server";
 import { components } from "./_generated/api";
-import { exposeApi } from "@gilhrpenner/convex-files-control";
 
-// Define your authentication/authorization logic
-const filesApi = exposeApi(components.convexFilesControl, {
-  auth: async (ctx, operation) => {
-    // Example: Check if user is authenticated
-    // const identity = await ctx.auth.getUserIdentity();
+// Expose only the client-facing download operation (with your auth rules)
+export const createDownloadGrant = mutation({
+  args: {
+    storageId: v.id("_storage"),
+    maxUses: v.optional(v.union(v.null(), v.number())),
+    expiresAt: v.optional(v.union(v.null(), v.number())),
+  },
+  handler: async (ctx, args) => {
+    // Example auth: const identity = await ctx.auth.getUserIdentity();
     // if (!identity) throw new Error("Unauthorized");
-    // You can inspect 'operation.type' for fine-grained control
-    // if (operation.type === "deleteFile" && !isAdmin(identity)) ...
+    return await ctx.runMutation(
+      components.convexFilesControl.download.createDownloadGrant,
+      args,
+    );
   },
 });
 
-// Expose mutations and queries
-export const generateUploadUrl = filesApi.generateUploadUrl;
-export const finalizeUpload = filesApi.finalizeUpload;
-export const registerFile = filesApi.registerFile;
-export const createDownloadGrant = filesApi.createDownloadGrant;
-export const consumeDownloadGrantForUrl = filesApi.consumeDownloadGrantForUrl;
-export const cleanupExpired = filesApi.cleanupExpired;
-export const deleteFile = filesApi.deleteFile;
-export const addAccessKey = filesApi.addAccessKey;
-export const removeAccessKey = filesApi.removeAccessKey;
-export const updateFileExpiration = filesApi.updateFileExpiration;
-export const listFiles = filesApi.listFiles;
-export const listFilesByAccessKey = filesApi.listFilesByAccessKey;
-export const getFile = filesApi.getFile;
-// ... expose others as needed
+// Wrap other component functions in server-side mutations/actions as needed.
+// For example, upload support via presigned URLs:
+export const generateUploadUrl = mutation({
+  args: {},
+  handler: async (ctx) => {
+    return await ctx.runMutation(
+      components.convexFilesControl.upload.generateUploadUrl,
+      {},
+    );
+  },
+});
 ```
 
 ### 3. Setup HTTP Routes (Optional)
@@ -92,8 +93,9 @@ import { components } from "./_generated/api";
 const http = httpRouter();
 
 registerRoutes(http, components.convexFilesControl, {
-  pathPrefix: "/files", // Routes will be /files/upload and /files/download
+  pathPrefix: "/files", // Routes will be /files/download (upload is opt-in)
   requireAccessKey: false, // Set to true to enforce accessKey param on downloads
+  enableUploadRoute: true, // Opt-in to /files/upload
 });
 
 export default http;
@@ -232,11 +234,15 @@ a matching key (e.g., their User ID).
 - `addAccessKey(storageId, accessKey)`
 - `removeAccessKey(storageId, accessKey)`
 - `hasAccessKey(storageId, accessKey)`
+- `listAccessKeysPage(storageId, paginationOpts)`
 
-#### File Listings
+#### File Listings (Paginated)
 
-- `listFiles()`: List all files.
-- `listFilesByAccessKey(accessKey)`: List files for a specific user.
+- `listFilesPage(paginationOpts)`: List files using cursor-based pagination.
+- `listFilesByAccessKeyPage(accessKey, paginationOpts)`: List files for a specific user.
+
+`paginationOpts` is the standard Convex pagination object:
+`{ numItems: number, cursor: string | null }`.
 
 #### Cleanup
 

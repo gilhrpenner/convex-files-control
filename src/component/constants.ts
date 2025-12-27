@@ -1,0 +1,3 @@
+export const DEFAULT_MAX_DOWNLOAD_USES = 1;
+export const PENDING_UPLOAD_TTL_MS = 60 * 60 * 1000;
+export const DEFAULT_CLEANUP_LIMIT = 500;

@@ -76,6 +76,10 @@
       "default": "./dist/component/convex.config.js"
     }
   },
+  "dependencies": {
+    "@convex-dev/action-retrier": "^0.3.0",
+    "convex-helpers": "^0.1.67"
+  },
   "peerDependencies": {
     "convex": "^1.29.3",
     "react": "^18.3.1 || ^19.0.0"

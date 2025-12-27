@@ -61,6 +61,13 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         { deleted: boolean },
         Name
       >;
+      deleteStorageFile: FunctionReference<
+        "action",
+        "internal",
+        { storageId: string },
+        null,
+        Name
+      >;
     };
     download: {
       consumeDownloadGrantForUrl: FunctionReference<
@@ -112,38 +119,108 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         boolean,
         Name
       >;
-      listAccessKeys: FunctionReference<
+      listAccessKeysPage: FunctionReference<
         "query",
         "internal",
-        { storageId: string },
-        Array<string>,
-        Name
-      >;
-      listDownloadGrants: FunctionReference<
-        "query",
-        "internal",
-        {},
-        Array<{
-          _id: string;
-          expiresAt: number | null;
-          maxUses: null | number;
+        {
+          paginationOpts: {
+            cursor: string | null;
+            endCursor?: string | null;
+            id?: number;
+            maximumBytesRead?: number;
+            maximumRowsRead?: number;
+            numItems: number;
+          };
           storageId: string;
-          useCount: number;
-        }>,
+        },
+        {
+          continueCursor: string;
+          isDone: boolean;
+          page: Array<string>;
+          pageStatus?: "SplitRecommended" | "SplitRequired" | null;
+          splitCursor?: string | null;
+        },
         Name
       >;
-      listFiles: FunctionReference<
+      listDownloadGrantsPage: FunctionReference<
         "query",
         "internal",
-        {},
-        Array<{ _id: string; expiresAt: number | null; storageId: string }>,
+        {
+          paginationOpts: {
+            cursor: string | null;
+            endCursor?: string | null;
+            id?: number;
+            maximumBytesRead?: number;
+            maximumRowsRead?: number;
+            numItems: number;
+          };
+        },
+        {
+          continueCursor: string;
+          isDone: boolean;
+          page: Array<{
+            _id: string;
+            expiresAt: number | null;
+            maxUses: null | number;
+            storageId: string;
+            useCount: number;
+          }>;
+          pageStatus?: "SplitRecommended" | "SplitRequired" | null;
+          splitCursor?: string | null;
+        },
         Name
       >;
-      listFilesByAccessKey: FunctionReference<
+      listFilesByAccessKeyPage: FunctionReference<
         "query",
         "internal",
-        { accessKey: string },
-        Array<{ _id: string; expiresAt: number | null; storageId: string }>,
+        {
+          accessKey: string;
+          paginationOpts: {
+            cursor: string | null;
+            endCursor?: string | null;
+            id?: number;
+            maximumBytesRead?: number;
+            maximumRowsRead?: number;
+            numItems: number;
+          };
+        },
+        {
+          continueCursor: string;
+          isDone: boolean;
+          page: Array<{
+            _id: string;
+            expiresAt: number | null;
+            storageId: string;
+          }>;
+          pageStatus?: "SplitRecommended" | "SplitRequired" | null;
+          splitCursor?: string | null;
+        },
+        Name
+      >;
+      listFilesPage: FunctionReference<
+        "query",
+        "internal",
+        {
+          paginationOpts: {
+            cursor: string | null;
+            endCursor?: string | null;
+            id?: number;
+            maximumBytesRead?: number;
+            maximumRowsRead?: number;
+            numItems: number;
+          };
+        },
+        {
+          continueCursor: string;
+          isDone: boolean;
+          page: Array<{
+            _id: string;
+            expiresAt: number | null;
+            storageId: string;
+          }>;
+          pageStatus?: "SplitRecommended" | "SplitRequired" | null;
+          splitCursor?: string | null;
+        },
         Name
       >;
     };

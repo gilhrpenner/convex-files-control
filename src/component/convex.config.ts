@@ -1,3 +1,8 @@
 import { defineComponent } from "convex/server";
+import actionRetrier from "@convex-dev/action-retrier/convex.config";
 
-export default defineComponent("convexFilesControl");
+const component = defineComponent("convexFilesControl");
+
+component.use(actionRetrier);
+
+export default component;

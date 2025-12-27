@@ -1,8 +1,59 @@
 import { v } from "convex/values";
-import type { Doc, Id } from "./_generated/dataModel";
-import { internalMutation, mutation, type MutationCtx } from "./_generated/server";
-import { internal } from "./_generated/api";
-import { findFileByStorageId } from "./lib";
+import type { Doc } from "./_generated/dataModel";
+import {
+  action,
+  internalMutation,
+  mutation,
+  type MutationCtx,
+} from "./_generated/server";
+import { api, components, internal } from "./_generated/api";
+import { findFileByStorageId, toStorageId } from "./lib";
+import { DEFAULT_CLEANUP_LIMIT } from "./constants";
+import { ActionRetrier } from "@convex-dev/action-retrier";
+
+const retrier = new ActionRetrier(components.actionRetrier);
+
+const useActionRetrier =
+  typeof process === "undefined" ||
+  (!process.env.VITEST && process.env.NODE_ENV !== "test");
+
+/**
+ * Delete a storage object by ID.
+ *
+ * This action exists to allow retries via the action retrier.
+ *
+ * @param args.storageId - The storage ID to delete.
+ * @returns `null`.
+ *
+ * @example
+ * ```ts
+ * await ctx.runAction(components.convexFilesControl.cleanUp.deleteStorageFile, {
+ *   storageId,
+ * });
+ * ```
+ */
+export const deleteStorageFile = action({
+  args: {
+    storageId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await ctx.storage.delete(toStorageId(args.storageId));
+    return null;
+  },
+});
+
+async function deleteStorageFileWithRetry(
+  ctx: MutationCtx,
+  storageId: string,
+) {
+  if (!useActionRetrier) {
+    await ctx.storage.delete(toStorageId(storageId));
+    return;
+  }
+
+  await retrier.run(ctx, api.cleanUp.deleteStorageFile, { storageId });
+}
 
 async function deleteFileCascadeCore(ctx: MutationCtx, file: Doc<"files">) {
   const storageId = file.storageId;
@@ -19,24 +70,15 @@ async function deleteFileCascadeCore(ctx: MutationCtx, file: Doc<"files">) {
 
   await Promise.all([
     ctx.db.delete(file._id),
-    ctx.storage.delete(storageId),
+    deleteStorageFileWithRetry(ctx, storageId),
     ...accessRows.map((row) => ctx.db.delete(row._id)),
     ...grants.map((grant) => ctx.db.delete(grant._id)),
   ]);
 }
 
-/**
- * Deletes a file and all associated records in a cascade operation.
- * Deletes file access records, download grants, the file record itself, and the storage file.
- *
- * @param ctx - The mutation context
- * @param storageId - The storage ID of the file to delete
- *
- * @returns void (no-op if file doesn't exist)
- */
 export async function deleteFileCascade(
   ctx: MutationCtx,
-  storageId: Id<"_storage">,
+  storageId: string,
 ) {
   const file = await findFileByStorageId(ctx, storageId);
   if (!file) {
@@ -47,16 +89,23 @@ export async function deleteFileCascade(
 }
 
 /**
- * Deletes a file and all associated records.
- * This is the public mutation that wraps deleteFileCascade.
+ * Delete a file and all associated records.
  *
- * @param args.storageId - The storage ID of the file to delete
+ * Removes access key mappings, download grants, and the storage object.
  *
- * @returns Success status and whether the file existed
+ * @param args.storageId - The file's storage ID.
+ * @returns `{ deleted: true }` if the file existed and was removed.
+ *
+ * @example
+ * ```ts
+ * await ctx.runMutation(components.convexFilesControl.cleanUp.deleteFile, {
+ *   storageId,
+ * });
+ * ```
  */
 export const deleteFile = mutation({
   args: {
-    storageId: v.id("_storage"),
+    storageId: v.string(),
   },
   returns: v.object({
     deleted: v.boolean(),
@@ -66,6 +115,7 @@ export const deleteFile = mutation({
     if (!file) {
       return { deleted: false };
     }
+
     await deleteFileCascadeCore(ctx, file);
     return { deleted: true };
   },
@@ -76,7 +126,7 @@ async function cleanupExpiredCore(
   args: { limit?: number },
 ) {
   const now = Date.now();
-  const limit = args.limit ?? 500;
+  const limit = args.limit ?? DEFAULT_CLEANUP_LIMIT;
 
   const [expiredUploads, expiredGrants, expiredFiles] = await Promise.all([
     ctx.db
@@ -116,13 +166,25 @@ async function cleanupExpiredCore(
 }
 
 /**
- * Cleans up expired records (pending uploads, download grants, and files).
- * Deletes expired records up to the specified limit per type (default: 500).
- * Files are deleted with cascade (including associated access keys and grants).
+ * Purge expired pending uploads, download grants, and file records.
  *
- * @param args.limit - Maximum number of expired records to delete per type (default: 500)
+ * Deletes up to `limit` items per table and schedules follow-up work if more
+ * items remain.
  *
- * @returns An object with total deleted count and whether more work remains.
+ * @param args.limit - Maximum number of expired records to delete per table.
+ * @returns The number of deleted records and whether more work remains.
+ *
+ * @example
+ * ```ts
+ * import { cronJobs } from "convex/server";
+ * import { components } from "./_generated/api";
+ *
+ * const crons = cronJobs();
+ * crons.hourly("cleanup-files", { minuteUTC: 0 }, components.convexFilesControl.cleanUp.cleanupExpired, {
+ *   limit: 500,
+ * });
+ * export default crons;
+ * ```
  */
 export const cleanupExpired = mutation({
   args: {
@@ -137,10 +199,6 @@ export const cleanupExpired = mutation({
   },
 });
 
-/**
- * Internal mutation for recursive cleanup.
- * Same as cleanupExpired but callable via scheduler.runAfter.
- */
 export const cleanupExpiredInternal = internalMutation({
   args: {
     limit: v.optional(v.number()),
