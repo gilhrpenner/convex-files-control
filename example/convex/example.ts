@@ -2,17 +2,27 @@ import { mutation, query } from "./_generated/server.js";
 import { components } from "./_generated/api.js";
 import { ConvexError, v } from "convex/values";
 import { buildDownloadUrl } from "@gilhrpenner/convex-files-control";
+import { getR2ConfigFromEnv } from "./r2Config";
 
 const defaultLimit = 100;
 const defaultCustomFilesLimit = 100;
 const defaultPaginationOpts = { numItems: defaultLimit, cursor: null };
 
 export const generateUploadUrl = mutation({
-  args: {},
-  handler: async (ctx) => {
+  args: {
+    provider: v.union(v.literal("convex"), v.literal("r2")),
+  },
+  handler: async (ctx, args) => {
+    const r2Config = getR2ConfigFromEnv();
+    if (args.provider === "r2" && !r2Config) {
+      throw new ConvexError("R2 configuration is missing.");
+    }
     return await ctx.runMutation(
       components.convexFilesControl.upload.generateUploadUrl,
-      {},
+      {
+        provider: args.provider,
+        r2Config: r2Config ?? undefined,
+      },
     );
   },
 });
@@ -23,6 +33,13 @@ export const finalizeUpload = mutation({
     storageId: v.string(),
     accessKeys: v.array(v.string()),
     expiresAt: v.optional(v.union(v.null(), v.number())),
+    metadata: v.optional(
+      v.object({
+        size: v.number(),
+        sha256: v.string(),
+        contentType: v.union(v.string(), v.null()),
+      }),
+    ),
   },
   handler: async (ctx, args) => {
     return await ctx.runMutation(
@@ -92,7 +109,11 @@ export const listComponentFiles = query({
       components.convexFilesControl.queries.listFilesPage,
       { paginationOpts: defaultPaginationOpts },
     );
-    return result.page;
+    return result.page.map((file) => ({
+      _id: file._id,
+      storageId: file.storageId,
+      expiresAt: file.expiresAt,
+    }));
   },
 });
 
