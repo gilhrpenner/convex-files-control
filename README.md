@@ -224,6 +224,68 @@ export const generateLink = mutation({
 The user then visits this URL. The component validates the grant and redirects
 to the secure storage URL.
 
+#### Password-Protected Download Grants
+
+You can optionally protect a grant with a password. The component hashes the
+password using PBKDF2-SHA256 with a per-grant salt and only stores the hash.
+
+```typescript
+// Server-side (Mutation)
+export const generatePasswordLink = mutation({
+  args: { storageId: v.id("_storage") },
+  handler: async (ctx, args) => {
+    const grant = await ctx.runMutation(api.files.createDownloadGrant, {
+      storageId: args.storageId,
+      password: "secret-passphrase",
+    });
+
+    return buildDownloadUrl({
+      baseUrl: "https://<your-convex-site>",
+      downloadToken: grant.downloadToken,
+      filename: "report.pdf",
+    });
+  },
+});
+```
+
+To consume a password-protected grant, pass the password to
+`consumeDownloadGrantForUrl`:
+
+```typescript
+const result = await ctx.runMutation(
+  components.convexFilesControl.download.consumeDownloadGrantForUrl,
+  { downloadToken, accessKey, password: "secret-passphrase" },
+);
+```
+
+If you use the HTTP GET download route, you can send the password via the
+`x-download-password` header (preferred) or a `password` query param. Note that
+query params can appear in logs and caches, so headers or POST flows are safer.
+
+#### Rate Limiting Downloads
+
+If you want to rate limit downloads, use the `checkDownloadRequest` hook when
+registering routes and call your preferred rate limiter there.
+
+```typescript
+registerRoutes(http, components.convexFilesControl, {
+  checkDownloadRequest: async (_ctx, { request }) => {
+    const ip =
+      request.headers.get("x-forwarded-for") ??
+      request.headers.get("cf-connecting-ip") ??
+      "unknown";
+
+    // Call your rate limiter here. Return a Response to short-circuit.
+    if (ip === "blocked") {
+      return new Response(JSON.stringify({ error: "Too many requests" }), {
+        status: 429,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+  },
+});
+```
+
 ### Managing Files
 
 #### Access Control

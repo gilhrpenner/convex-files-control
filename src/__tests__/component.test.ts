@@ -419,6 +419,13 @@ describe("download", () => {
       }),
     ).rejects.toThrowError("Expiration must be in the future.");
 
+    await expect(
+      t.mutation(api.download.createDownloadGrant, {
+        storageId,
+        password: "   ",
+      }),
+    ).rejects.toThrowError("Password cannot be empty.");
+
     const grant = await t.mutation(api.download.createDownloadGrant, {
       storageId,
       maxUses: null,
@@ -427,6 +434,20 @@ describe("download", () => {
 
     expect(grant.maxUses).toBeNull();
     expect(grant.expiresAt).toBeNull();
+
+    const passwordGrant = await t.mutation(api.download.createDownloadGrant, {
+      storageId,
+      password: "secret",
+    });
+
+    const storedPasswordGrant = await t.run(async (ctx) => {
+      return await ctx.db.get("downloadGrants", passwordGrant.downloadToken);
+    });
+
+    expect(storedPasswordGrant?.passwordHash).toBeTypeOf("string");
+    expect(storedPasswordGrant?.passwordSalt).toBeTypeOf("string");
+    expect(storedPasswordGrant?.passwordIterations).toBeTypeOf("number");
+    expect(storedPasswordGrant?.passwordAlgorithm).toBe("pbkdf2-sha256");
   });
 
   test("consumeDownloadGrantForUrl handles statuses", async () => {
@@ -543,6 +564,55 @@ describe("download", () => {
     });
 
     expect(wrongAccess).toEqual({ status: "access_denied" });
+
+    const { storageId: passwordStorage } = await createRegisteredFile(t, {
+      accessKeys: ["pw"],
+    });
+    const passwordGrant = await t.mutation(api.download.createDownloadGrant, {
+      storageId: passwordStorage,
+      password: "secret",
+    });
+
+    const passwordNoAccess = await t.mutation(
+      api.download.consumeDownloadGrantForUrl,
+      {
+        downloadToken: passwordGrant.downloadToken,
+        accessKey: " ",
+        password: "wrong",
+      },
+    );
+
+    expect(passwordNoAccess).toEqual({ status: "access_denied" });
+
+    const missingPassword = await t.mutation(
+      api.download.consumeDownloadGrantForUrl,
+      {
+        downloadToken: passwordGrant.downloadToken,
+        accessKey: "pw",
+      },
+    );
+
+    expect(missingPassword).toEqual({ status: "password_required" });
+
+    const invalidPassword = await t.mutation(
+      api.download.consumeDownloadGrantForUrl,
+      {
+        downloadToken: passwordGrant.downloadToken,
+        accessKey: "pw",
+        password: "wrong",
+      },
+    );
+
+    expect(invalidPassword).toEqual({ status: "invalid_password" });
+
+    const okPassword = await t.mutation(api.download.consumeDownloadGrantForUrl, {
+      downloadToken: passwordGrant.downloadToken,
+      accessKey: "pw",
+      password: "secret",
+    });
+
+    expect(okPassword.status).toBe("ok");
+    expect(okPassword.downloadUrl).toBeTypeOf("string");
 
     vi.useFakeTimers();
     vi.setSystemTime(new Date());

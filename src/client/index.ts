@@ -42,15 +42,37 @@ import {
 export { uploadFormFields };
 
 export interface RegisterRoutesOptions {
+  /** Prefix for HTTP routes, defaults to "/files". */
   pathPrefix?: string;
+  /** Require accessKey query param for downloads. */
   requireAccessKey?: boolean;
+  /** Query parameter name for accessKey. */
   accessKeyQueryParam?: string;
+  /**
+   * Query parameter name for password. Note: query params can leak into logs or
+   * caches; prefer headers or POST flows when possible.
+   */
+  passwordQueryParam?: string;
+  /** Header name for password (preferred over query params). */
+  passwordHeader?: string;
   enableUploadRoute?: boolean;
   enableDownloadRoute?: boolean;
+  /**
+   * Optional hook for rate limiting or request validation. Return a Response to
+   * short-circuit the request (e.g. 429).
+   */
+  checkDownloadRequest?: (
+    ctx: RunMutationCtx,
+    args: DownloadRequestArgs,
+  ) => void | Response | Promise<void | Response>;
 }
 
 /**
  * Register HTTP routes for upload and download endpoints.
+ *
+ * Note: Passing passwords via query parameters can expose them in logs or
+ * caches. Prefer a header (e.g. `x-download-password`) or a POST-based flow
+ * when possible.
  *
  * @param http - Your Convex `HttpRouter`.
  * @param component - The configured component API reference.
@@ -80,8 +102,11 @@ export function registerRoutes(
     pathPrefix = DEFAULT_PATH_PREFIX,
     requireAccessKey = false,
     accessKeyQueryParam = "accessKey",
+    passwordQueryParam = "password",
+    passwordHeader = "x-download-password",
     enableUploadRoute = false,
     enableDownloadRoute = true,
+    checkDownloadRequest,
   } = options;
 
   const normalizedPrefix = normalizePathPrefix(pathPrefix);
@@ -184,9 +209,29 @@ export function registerRoutes(
           return jsonError("Missing required accessKey", 401);
         }
 
+        const passwordFromHeader = passwordHeader
+          ? request.headers.get(passwordHeader)
+          : null;
+        const passwordFromQuery = passwordQueryParam
+          ? url.searchParams.get(passwordQueryParam)
+          : null;
+        const password = passwordFromHeader ?? passwordFromQuery ?? undefined;
+
+        if (checkDownloadRequest) {
+          const result = await checkDownloadRequest(ctx, {
+            downloadToken,
+            accessKey,
+            password,
+            request,
+          });
+          if (result instanceof Response) {
+            return result;
+          }
+        }
+
         const result = await ctx.runMutation(
           component.download.consumeDownloadGrantForUrl,
-          { downloadToken, accessKey },
+          { downloadToken, accessKey, password },
         );
 
         if (result.status !== "ok" || !result.downloadUrl) {
@@ -235,6 +280,9 @@ export interface BuildDownloadUrlOptions {
  *
  * @param options - Base URL, token, and optional query parameters.
  * @returns A fully qualified URL for the download route.
+ *
+ * Note: Avoid placing passwords in query params; they can leak into logs or
+ * caches. Prefer headers or POST flows when possible.
  *
  * @example
  * ```ts
@@ -285,12 +333,14 @@ const toDownloadGrantSummary = (grant: {
   expiresAt: number | null;
   maxUses: number | null;
   useCount: number;
+  hasPassword: boolean;
 }) => ({
   _id: asDownloadGrantId(grant._id),
   storageId: grant.storageId,
   expiresAt: grant.expiresAt,
   maxUses: grant.maxUses,
   useCount: grant.useCount,
+  hasPassword: grant.hasPassword,
 });
 
 export type ClientApi = ApiFromModules<{
@@ -327,11 +377,20 @@ type DownloadGrantArgs = {
   storageId: string;
   maxUses?: number | null;
   expiresAt?: number | null;
+  password?: string;
 };
 
 type DownloadConsumeArgs = {
   downloadToken: Id<"downloadGrants">;
   accessKey?: string;
+  password?: string;
+};
+
+type DownloadRequestArgs = {
+  downloadToken: string;
+  accessKey?: string;
+  password?: string;
+  request: Request;
 };
 
 type AccessKeyArgs = {
@@ -625,6 +684,7 @@ export class FilesControl {
           storageId: v.string(),
           maxUses: v.optional(v.union(v.null(), v.number())),
           expiresAt: v.optional(v.union(v.null(), v.number())),
+          password: v.optional(v.string()),
         },
         returns: v.object({
           downloadToken: v.id("downloadGrants"),
@@ -658,6 +718,7 @@ export class FilesControl {
         args: {
           downloadToken: v.id("downloadGrants"),
           accessKey: v.optional(v.string()),
+          password: v.optional(v.string()),
         },
         returns: v.object({
           status: downloadConsumeStatusValidator,

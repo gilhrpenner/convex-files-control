@@ -143,7 +143,47 @@ describe("registerRoutes", () => {
 
     expect(runMutation).toHaveBeenCalledWith(
       component.download.consumeDownloadGrantForUrl,
-      { downloadToken: "token", accessKey: "custom" },
+      { downloadToken: "token", accessKey: "custom", password: undefined },
+    );
+  });
+
+  test("download route forwards password from query or header", async () => {
+    const router = createRouter();
+    registerRoutes(router, component, { passwordHeader: "x-download-password" });
+    const downloadRoute = getRoute(router, "/files/download", "GET");
+    const handler = getHandler(downloadRoute.handler);
+
+    const runMutation = vi.fn(async () => ({
+      status: "ok",
+      downloadUrl: "https://file.example.com",
+    }));
+    const ctx = makeCtx(runMutation);
+
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("file", { status: 200 })));
+
+    await handler(
+      ctx,
+      buildDownloadRequest(
+        "https://example.com/files/download?token=token&password=query",
+      ),
+    );
+
+    expect(runMutation).toHaveBeenCalledWith(
+      component.download.consumeDownloadGrantForUrl,
+      { downloadToken: "token", accessKey: undefined, password: "query" },
+    );
+
+    runMutation.mockClear();
+    const headerRequest = buildDownloadRequest(
+      "https://example.com/files/download?token=token",
+    );
+    headerRequest.headers.set("x-download-password", "header");
+
+    await handler(ctx, headerRequest);
+
+    expect(runMutation).toHaveBeenCalledWith(
+      component.download.consumeDownloadGrantForUrl,
+      { downloadToken: "token", accessKey: undefined, password: "header" },
     );
   });
 
@@ -381,6 +421,8 @@ describe("registerRoutes", () => {
       { status: "exhausted", code: 410 },
       { status: "file_expired", code: 410 },
       { status: "access_denied", code: 403 },
+      { status: "password_required", code: 401 },
+      { status: "invalid_password", code: 403 },
       { status: "not_found", code: 404 },
       { status: "ok", code: 404 },
     ];
