@@ -50,21 +50,46 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
       cleanupExpired: FunctionReference<
         "mutation",
         "internal",
-        { limit?: number },
+        {
+          limit?: number;
+          r2Config?: {
+            accessKeyId: string;
+            accountId: string;
+            bucketName: string;
+            secretAccessKey: string;
+          };
+        },
         { deletedCount: number; hasMore: boolean },
         Name
       >;
       deleteFile: FunctionReference<
         "mutation",
         "internal",
-        { storageId: string },
+        {
+          r2Config?: {
+            accessKeyId: string;
+            accountId: string;
+            bucketName: string;
+            secretAccessKey: string;
+          };
+          storageId: string;
+        },
         { deleted: boolean },
         Name
       >;
       deleteStorageFile: FunctionReference<
         "action",
         "internal",
-        { storageId: string },
+        {
+          r2Config?: {
+            accessKeyId: string;
+            accountId: string;
+            bucketName: string;
+            secretAccessKey: string;
+          };
+          storageId: string;
+          storageProvider: "convex" | "r2";
+        },
         null,
         Name
       >;
@@ -73,7 +98,17 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
       consumeDownloadGrantForUrl: FunctionReference<
         "mutation",
         "internal",
-        { accessKey?: string; downloadToken: string; password?: string },
+        {
+          accessKey?: string;
+          downloadToken: string;
+          password?: string;
+          r2Config?: {
+            accessKeyId: string;
+            accountId: string;
+            bucketName: string;
+            secretAccessKey: string;
+          };
+        },
         {
           downloadUrl?: string;
           status:
@@ -112,7 +147,12 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         "query",
         "internal",
         { storageId: string },
-        { _id: string; expiresAt: number | null; storageId: string } | null,
+        {
+          _id: string;
+          expiresAt: number | null;
+          storageId: string;
+          storageProvider: "convex" | "r2";
+        } | null,
         Name
       >;
       hasAccessKey: FunctionReference<
@@ -195,6 +235,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             _id: string;
             expiresAt: number | null;
             storageId: string;
+            storageProvider: "convex" | "r2";
           }>;
           pageStatus?: "SplitRecommended" | "SplitRequired" | null;
           splitCursor?: string | null;
@@ -221,6 +262,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             _id: string;
             expiresAt: number | null;
             storageId: string;
+            storageProvider: "convex" | "r2";
           }>;
           pageStatus?: "SplitRecommended" | "SplitRequired" | null;
           splitCursor?: string | null;
@@ -228,13 +270,56 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         Name
       >;
     };
+    transfer: {
+      transferFile: FunctionReference<
+        "action",
+        "internal",
+        {
+          r2Config?: {
+            accessKeyId: string;
+            accountId: string;
+            bucketName: string;
+            secretAccessKey: string;
+          };
+          storageId: string;
+          targetProvider: "convex" | "r2";
+        },
+        { storageId: string; storageProvider: "convex" | "r2" },
+        Name
+      >;
+    };
     upload: {
+      computeR2Metadata: FunctionReference<
+        "action",
+        "internal",
+        {
+          r2Config: {
+            accessKeyId: string;
+            accountId: string;
+            bucketName: string;
+            secretAccessKey: string;
+          };
+          storageId: string;
+        },
+        {
+          contentType: string | null;
+          sha256: string;
+          size: number;
+          storageId: string;
+        },
+        Name
+      >;
       finalizeUpload: FunctionReference<
         "mutation",
         "internal",
         {
           accessKeys: Array<string>;
           expiresAt?: null | number;
+          metadata?: {
+            contentType: string | null;
+            sha256: string;
+            size: number;
+          };
           storageId: string;
           uploadToken: string;
         },
@@ -245,16 +330,27 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             sha256: string;
             size: number;
             storageId: string;
-          };
+          } | null;
           storageId: string;
+          storageProvider: "convex" | "r2";
         },
         Name
       >;
       generateUploadUrl: FunctionReference<
         "mutation",
         "internal",
-        {},
         {
+          provider: "convex" | "r2";
+          r2Config?: {
+            accessKeyId: string;
+            accountId: string;
+            bucketName: string;
+            secretAccessKey: string;
+          };
+        },
+        {
+          storageId: string | null;
+          storageProvider: "convex" | "r2";
           uploadToken: string;
           uploadTokenExpiresAt: number;
           uploadUrl: string;
@@ -273,6 +369,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             size: number;
           };
           storageId: string;
+          storageProvider: "convex" | "r2";
         },
         {
           expiresAt: null | number;
@@ -281,8 +378,9 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             sha256: string;
             size: number;
             storageId: string;
-          };
+          } | null;
           storageId: string;
+          storageProvider: "convex" | "r2";
         },
         Name
       >;

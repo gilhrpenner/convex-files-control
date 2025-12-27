@@ -47,11 +47,13 @@ async function createRegisteredFile(t: TestContext, options: RegisterOptions = {
   const { storageId } = await createStorageFile(t);
   const args: {
     storageId: StorageId;
+    storageProvider: "convex" | "r2";
     accessKeys: string[];
     expiresAt?: number | null;
     metadata?: FileMetadata;
   } = {
     storageId,
+    storageProvider: "convex",
     accessKeys: options.accessKeys ?? ["key"],
   };
   if (options.expiresAt !== undefined) {
@@ -68,9 +70,13 @@ async function insertFileRecord(
   t: TestContext,
   storageId: StorageId,
   expiresAt?: number,
+  storageProvider: "convex" | "r2" = "convex",
 ) {
   return await t.run(async (ctx) => {
-    const data = expiresAt === undefined ? { storageId } : { storageId, expiresAt };
+    const data =
+      expiresAt === undefined
+        ? { storageId, storageProvider }
+        : { storageId, storageProvider, expiresAt };
     return await ctx.db.insert("files", data);
   });
 }
@@ -100,9 +106,15 @@ async function insertDownloadGrant(t: TestContext, input: DownloadGrantInput) {
 async function insertPendingUpload(
   t: TestContext,
   expiresAt: number,
+  storageProvider: "convex" | "r2" = "convex",
+  storageId?: string,
 ): Promise<PendingUploadId> {
   return await t.run(async (ctx) => {
-    return await ctx.db.insert("pendingUploads", { expiresAt });
+    return await ctx.db.insert("pendingUploads", {
+      expiresAt,
+      storageProvider,
+      storageId,
+    });
   });
 }
 
@@ -141,6 +153,7 @@ describe("access control", () => {
     const { storageId } = await createStorageFile(t, "registered");
     await t.mutation(api.upload.registerFile, {
       storageId,
+      storageProvider: "convex",
       accessKeys: ["first"],
     });
 
@@ -173,6 +186,7 @@ describe("access control", () => {
     const { storageId } = await createStorageFile(t, "multi");
     await t.mutation(api.upload.registerFile, {
       storageId,
+      storageProvider: "convex",
       accessKeys: ["alpha", "beta"],
     });
 
@@ -206,6 +220,7 @@ describe("access control", () => {
     const { storageId: singleId } = await createStorageFile(t, "single");
     await t.mutation(api.upload.registerFile, {
       storageId: singleId,
+      storageProvider: "convex",
       accessKeys: ["solo"],
     });
 
@@ -231,6 +246,7 @@ describe("access control", () => {
     const { storageId } = await createStorageFile(t, "file");
     await t.mutation(api.upload.registerFile, {
       storageId,
+      storageProvider: "convex",
       accessKeys: ["key"],
     });
 
@@ -261,17 +277,22 @@ describe("access control", () => {
 describe("upload", () => {
   test("generateUploadUrl creates pending upload", async () => {
     const t = initConvexTest();
-    const result = await t.mutation(api.upload.generateUploadUrl, {});
+    const result = await t.mutation(api.upload.generateUploadUrl, {
+      provider: "convex",
+    });
 
     expect(result.uploadUrl).toBeTypeOf("string");
     expect(result.uploadToken).toBeDefined();
     expect(result.uploadTokenExpiresAt).toBeGreaterThan(Date.now());
+    expect(result.storageProvider).toBe("convex");
+    expect(result.storageId).toBeNull();
 
     const pending = await t.run(async (ctx) => {
       return await ctx.db.get("pendingUploads", result.uploadToken);
     });
 
     expect(pending?.expiresAt).toBe(result.uploadTokenExpiresAt);
+    expect(pending?.storageProvider).toBe("convex");
   });
 
   test("finalizeUpload validates tokens and registers files", async () => {
@@ -300,7 +321,9 @@ describe("upload", () => {
       }),
     ).rejects.toThrowError("Upload token not found.");
 
-    const { uploadToken } = await t.mutation(api.upload.generateUploadUrl, {});
+    const { uploadToken } = await t.mutation(api.upload.generateUploadUrl, {
+      provider: "convex",
+    });
     const result = await t.mutation(api.upload.finalizeUpload, {
       uploadToken,
       storageId,
@@ -309,8 +332,9 @@ describe("upload", () => {
     });
 
     expect(result.storageId).toBe(storageId);
+    expect(result.storageProvider).toBe("convex");
     expect(result.expiresAt).toBeNull();
-    expect(result.metadata.storageId).toBe(storageId);
+    expect(result.metadata?.storageId).toBe(storageId);
 
     const keys = await t.query(api.queries.listAccessKeysPage, {
       storageId,
@@ -332,6 +356,7 @@ describe("upload", () => {
     await expect(
       t.mutation(api.upload.registerFile, {
         storageId: storageA,
+        storageProvider: "convex",
         accessKeys: [],
       }),
     ).rejects.toThrowError("At least one accessKey is required.");
@@ -339,6 +364,7 @@ describe("upload", () => {
     await expect(
       t.mutation(api.upload.registerFile, {
         storageId: storageA,
+        storageProvider: "convex",
         accessKeys: ["key"],
         expiresAt: Date.now() - 1,
       }),
@@ -352,6 +378,7 @@ describe("upload", () => {
     await expect(
       t.mutation(api.upload.registerFile, {
         storageId: storageMissing,
+        storageProvider: "convex",
         accessKeys: ["key"],
       }),
     ).rejects.toThrowError("Storage file not found.");
@@ -359,6 +386,7 @@ describe("upload", () => {
     const { storageId: storageB } = await createStorageFile(t, "b");
     const result = await t.mutation(api.upload.registerFile, {
       storageId: storageB,
+      storageProvider: "convex",
       accessKeys: [" key ", "key", "other"],
       metadata: { size: 3, sha256: "abc", contentType: null },
     });
@@ -373,6 +401,7 @@ describe("upload", () => {
     await expect(
       t.mutation(api.upload.registerFile, {
         storageId: storageB,
+        storageProvider: "convex",
         accessKeys: ["other"],
       }),
     ).rejects.toThrowError("File already registered.");
@@ -402,6 +431,7 @@ describe("download", () => {
     const { storageId } = await createStorageFile(t, "file");
     await t.mutation(api.upload.registerFile, {
       storageId,
+      storageProvider: "convex",
       accessKeys: ["key"],
     });
 
@@ -785,6 +815,7 @@ describe("cleanUp", () => {
     );
     await t.mutation(api.upload.registerFile, {
       storageId: deleteExisting,
+      storageProvider: "convex",
       accessKeys: ["k"],
     });
 

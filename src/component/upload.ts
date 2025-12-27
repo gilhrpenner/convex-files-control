@@ -1,5 +1,5 @@
 import { ConvexError, v } from "convex/values";
-import { mutation, type MutationCtx } from "./_generated/server";
+import { action, mutation, type MutationCtx } from "./_generated/server";
 import {
   findFileByStorageId,
   normalizeAccessKeys,
@@ -10,6 +10,13 @@ import {
   fileMetadataInputValidator,
   fileMetadataValidator,
 } from "./validators";
+import { storageProviderValidator } from "./storageProvider";
+import {
+  getR2UploadUrl,
+  getR2DownloadUrl,
+  r2ConfigValidator,
+  requireR2Config,
+} from "./r2";
 
 /**
  * Start the two-step upload flow by issuing a signed upload URL.
@@ -19,27 +26,50 @@ import {
  * @example
  * ```ts
  * const { uploadUrl, uploadToken } =
- *   await ctx.runMutation(components.convexFilesControl.upload.generateUploadUrl, {});
+ *   await ctx.runMutation(components.convexFilesControl.upload.generateUploadUrl, {
+ *     provider: "convex",
+ *   });
  * ```
  */
 export const generateUploadUrl = mutation({
-  args: {},
+  args: {
+    provider: storageProviderValidator,
+    r2Config: v.optional(r2ConfigValidator),
+  },
   returns: v.object({
     uploadUrl: v.string(),
     uploadToken: v.id("pendingUploads"),
     uploadTokenExpiresAt: v.number(),
+    storageProvider: storageProviderValidator,
+    storageId: v.union(v.string(), v.null()),
   }),
-  handler: async (ctx) => {
+  handler: async (ctx, args) => {
     const uploadTokenExpiresAt = Date.now() + PENDING_UPLOAD_TTL_MS;
 
-    const [uploadUrl, uploadToken] = await Promise.all([
-      ctx.storage.generateUploadUrl(),
-      ctx.db.insert("pendingUploads", {
-        expiresAt: uploadTokenExpiresAt,
-      }),
-    ]);
+    let uploadUrl: string;
+    let storageId: string | null = null;
 
-    return { uploadUrl, uploadToken, uploadTokenExpiresAt };
+    if (args.provider === "convex") {
+      uploadUrl = await ctx.storage.generateUploadUrl();
+    } else {
+      const r2Config = requireR2Config(args.r2Config, "R2 uploads");
+      storageId = crypto.randomUUID();
+      uploadUrl = await getR2UploadUrl(r2Config, storageId);
+    }
+
+    const uploadToken = await ctx.db.insert("pendingUploads", {
+      expiresAt: uploadTokenExpiresAt,
+      storageProvider: args.provider,
+      storageId: storageId ?? undefined,
+    });
+
+    return {
+      uploadUrl,
+      uploadToken,
+      uploadTokenExpiresAt,
+      storageProvider: args.provider,
+      storageId,
+    };
   },
 });
 
@@ -50,6 +80,7 @@ export const generateUploadUrl = mutation({
  * @param args.storageId - The storage ID returned by the upload endpoint.
  * @param args.accessKeys - Access keys that can read the file.
  * @param args.expiresAt - Optional expiration timestamp.
+ * @param args.metadata - Optional metadata; useful for non-Convex providers.
  * @returns File metadata and expiration.
  *
  * @example
@@ -68,11 +99,13 @@ export const finalizeUpload = mutation({
     storageId: v.string(),
     accessKeys: v.array(v.string()),
     expiresAt: v.optional(v.union(v.null(), v.number())),
+    metadata: v.optional(fileMetadataInputValidator),
   },
   returns: v.object({
     storageId: v.string(),
+    storageProvider: storageProviderValidator,
     expiresAt: v.union(v.null(), v.number()),
-    metadata: fileMetadataValidator,
+    metadata: v.union(fileMetadataValidator, v.null()),
   }),
   handler: async (ctx, args) => {
     const pendingUpload = await ctx.db.get("pendingUploads", args.uploadToken);
@@ -84,8 +117,18 @@ export const finalizeUpload = mutation({
       throw new ConvexError("Upload token expired.");
     }
 
+    if (
+      pendingUpload.storageId &&
+      pendingUpload.storageId !== args.storageId
+    ) {
+      throw new ConvexError("Storage ID does not match pending upload.");
+    }
+
     const [result] = await Promise.all([
-      registerFileCore(ctx, { ...args }),
+      registerFileCore(ctx, {
+        ...args,
+        storageProvider: pendingUpload.storageProvider,
+      }),
       ctx.db.delete(args.uploadToken),
     ]);
 
@@ -100,6 +143,7 @@ export const finalizeUpload = mutation({
  * control and metadata after the upload.
  *
  * @param args.storageId - The storage ID to register.
+ * @param args.storageProvider - Storage provider for the file.
  * @param args.accessKeys - Access keys that can read the file.
  * @param args.expiresAt - Optional expiration timestamp.
  * @param args.metadata - Optional metadata; if omitted, it is fetched from storage.
@@ -118,14 +162,16 @@ export const finalizeUpload = mutation({
 export const registerFile = mutation({
   args: {
     storageId: v.string(),
+    storageProvider: storageProviderValidator,
     accessKeys: v.array(v.string()),
     expiresAt: v.optional(v.union(v.null(), v.number())),
     metadata: v.optional(fileMetadataInputValidator),
   },
   returns: v.object({
     storageId: v.string(),
+    storageProvider: storageProviderValidator,
     expiresAt: v.union(v.null(), v.number()),
-    metadata: fileMetadataValidator,
+    metadata: v.union(fileMetadataValidator, v.null()),
   }),
   handler: async (ctx, args) => {
     return registerFileCore(ctx, { ...args });
@@ -136,6 +182,7 @@ async function registerFileCore(
   ctx: MutationCtx,
   args: {
     storageId: string;
+    storageProvider: "convex" | "r2";
     accessKeys: string[];
     expiresAt?: number | null;
     metadata?: {
@@ -156,20 +203,25 @@ async function registerFileCore(
 
   const [existingRegistration, systemFile] = await Promise.all([
     findFileByStorageId(ctx, args.storageId),
-    args.metadata ? null : ctx.db.system.get(toStorageId(args.storageId)),
+    args.metadata || args.storageProvider !== "convex"
+      ? null
+      : ctx.db.system.get(toStorageId(args.storageId)),
   ]);
 
   if (existingRegistration) {
     throw new ConvexError("File already registered.");
   }
 
-  const metadata = args.metadata ?? systemFile;
-  if (!metadata) {
+  const metadata =
+    args.metadata ??
+    (args.storageProvider === "convex" ? systemFile : null);
+  if (!metadata && args.storageProvider === "convex") {
     throw new ConvexError("Storage file not found.");
   }
 
   const fileId = await ctx.db.insert("files", {
     storageId: args.storageId,
+    storageProvider: args.storageProvider,
     expiresAt: args.expiresAt ?? undefined,
   });
 
@@ -185,12 +237,61 @@ async function registerFileCore(
 
   return {
     storageId: args.storageId,
+    storageProvider: args.storageProvider,
     expiresAt: args.expiresAt ?? null,
-    metadata: {
-      storageId: args.storageId,
-      size: metadata.size,
-      sha256: metadata.sha256,
-      contentType: metadata.contentType ?? null,
-    },
+    metadata: metadata
+      ? {
+          storageId: args.storageId,
+          size: metadata.size,
+          sha256: metadata.sha256,
+          contentType: metadata.contentType ?? null,
+        }
+      : null,
   };
+}
+
+/**
+ * Compute metadata for an R2 object by downloading it server-side.
+ *
+ * @param args.storageId - The R2 object key.
+ * @param args.r2Config - R2 credentials and bucket.
+ * @returns File metadata for the object.
+ */
+export const computeR2Metadata = action({
+  args: {
+    storageId: v.string(),
+    r2Config: r2ConfigValidator,
+  },
+  returns: fileMetadataValidator,
+  handler: async (_ctx, args) => {
+    const r2Config = requireR2Config(args.r2Config, "R2 metadata");
+    const url = await getR2DownloadUrl(r2Config, args.storageId);
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new ConvexError("R2 file not found.");
+    }
+
+    const buffer = await response.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    const digest = await crypto.subtle.digest("SHA-256", bytes);
+    const sha256 = bytesToBase64(new Uint8Array(digest));
+
+    return {
+      storageId: args.storageId,
+      size: bytes.byteLength,
+      sha256,
+      contentType: response.headers.get("Content-Type") ?? null,
+    };
+  },
+});
+
+function bytesToBase64(bytes: Uint8Array): string {
+  if (typeof btoa === "function") {
+    let binary = "";
+    for (const byte of bytes) {
+      binary += String.fromCharCode(byte);
+    }
+    return btoa(binary);
+  }
+  return Buffer.from(bytes).toString("base64");
 }

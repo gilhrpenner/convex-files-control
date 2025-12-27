@@ -17,6 +17,7 @@ import type { Id } from "./_generated/dataModel";
 import { deleteFileCascade } from "./cleanUp";
 import { DEFAULT_MAX_DOWNLOAD_USES } from "./constants";
 import { downloadConsumeStatusValidator } from "./validators";
+import { r2ConfigValidator, requireR2Config, getR2DownloadUrl } from "./r2";
 
 /**
  * Create a one-time (or multi-use) download token for a file.
@@ -147,6 +148,7 @@ export const consumeDownloadGrantForUrl = mutation({
     downloadToken: v.id("downloadGrants"),
     accessKey: v.optional(v.string()),
     password: v.optional(v.string()),
+    r2Config: v.optional(r2ConfigValidator),
   },
   returns: v.object({
     status: downloadConsumeStatusValidator,
@@ -182,6 +184,12 @@ async function consumeDownloadGrantCore(
     downloadToken: Id<"downloadGrants">;
     accessKey?: string;
     password?: string;
+    r2Config?: {
+      accountId: string;
+      accessKeyId: string;
+      secretAccessKey: string;
+      bucketName: string;
+    };
   },
 ): Promise<DownloadConsumeResult> {
   const now = Date.now();
@@ -251,12 +259,18 @@ async function consumeDownloadGrantCore(
     await ctx.scheduler.runAfter(
       0,
       internal.download.deleteFileCascadeInternal,
-      { storageId: grant.storageId },
+      { storageId: grant.storageId, r2Config: args.r2Config },
     );
     return { status: "file_expired" };
   }
 
-  const downloadUrl = await ctx.storage.getUrl(toStorageId(grant.storageId));
+  let downloadUrl: string | null = null;
+  if (file.storageProvider === "convex") {
+    downloadUrl = await ctx.storage.getUrl(toStorageId(grant.storageId));
+  } else {
+    const r2Config = requireR2Config(args.r2Config, "R2 downloads");
+    downloadUrl = await getR2DownloadUrl(r2Config, grant.storageId);
+  }
   if (!downloadUrl) {
     return { status: "file_missing" };
   }
@@ -281,10 +295,11 @@ async function consumeDownloadGrantCore(
 export const deleteFileCascadeInternal = internalMutation({
   args: {
     storageId: v.string(),
+    r2Config: v.optional(r2ConfigValidator),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await deleteFileCascade(ctx, args.storageId);
+    await deleteFileCascade(ctx, args.storageId, args.r2Config);
     return null;
   },
 });

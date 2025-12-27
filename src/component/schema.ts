@@ -1,9 +1,11 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { storageProviderValidator } from "./storageProvider";
 
 export default defineSchema({
   files: defineTable({
     storageId: v.string(),
+    storageProvider: storageProviderValidator,
     expiresAt: v.optional(v.number()),
   })
     .index("by_storageId", ["storageId"])
@@ -33,5 +35,7 @@ export default defineSchema({
 
   pendingUploads: defineTable({
     expiresAt: v.number(),
+    storageProvider: storageProviderValidator,
+    storageId: v.optional(v.string()),
   }).index("by_expiresAt", ["expiresAt"]),
 });

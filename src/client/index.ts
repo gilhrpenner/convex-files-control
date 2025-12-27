@@ -5,6 +5,7 @@ import {
   paginationResultValidator,
   queryGeneric,
   type ApiFromModules,
+  type GenericActionCtx,
   type GenericDataModel,
   type GenericMutationCtx,
   type GenericQueryCtx,
@@ -21,13 +22,16 @@ import {
   fileMetadataValidator,
   fileSummaryValidator,
 } from "../component/validators";
+import { storageProviderValidator } from "../component/storageProvider";
 import {
   DEFAULT_PATH_PREFIX,
   buildEndpointUrl,
+  isStorageProvider,
   normalizeBaseUrl,
   normalizePathPrefix,
   uploadFormFields,
 } from "../shared";
+import type { R2Config, StorageProvider } from "../shared/types";
 import {
   corsResponse,
   jsonError,
@@ -40,6 +44,61 @@ import {
 } from "./http";
 
 export { uploadFormFields };
+
+export type R2ConfigInput = {
+  accountId?: string;
+  accessKeyId?: string;
+  secretAccessKey?: string;
+  bucketName?: string;
+};
+
+const R2_ENV_VARS: Record<keyof R2Config, string> = {
+  accountId: "R2_ACCOUNT_ID",
+  accessKeyId: "R2_ACCESS_KEY_ID",
+  secretAccessKey: "R2_SECRET_ACCESS_KEY",
+  bucketName: "R2_BUCKET_NAME",
+};
+
+const readEnv = (key: string) =>
+  typeof process !== "undefined" ? process.env[key] : undefined;
+
+const resolveR2Config = (input?: R2ConfigInput): R2Config | null => {
+  const config = {
+    accountId: input?.accountId ?? readEnv(R2_ENV_VARS.accountId),
+    accessKeyId: input?.accessKeyId ?? readEnv(R2_ENV_VARS.accessKeyId),
+    secretAccessKey:
+      input?.secretAccessKey ?? readEnv(R2_ENV_VARS.secretAccessKey),
+    bucketName: input?.bucketName ?? readEnv(R2_ENV_VARS.bucketName),
+  };
+
+  const hasAll = Object.values(config).every((value) => Boolean(value));
+  if (!hasAll) {
+    return null;
+  }
+
+  return config as R2Config;
+};
+
+const requireR2Config = (input?: R2ConfigInput, context?: string): R2Config => {
+  const config = resolveR2Config(input);
+  if (config) {
+    return config;
+  }
+
+  const missing = Object.entries(R2_ENV_VARS)
+    .filter(([key]) => {
+      const field = key as keyof R2Config;
+      const value = input?.[field] ?? readEnv(R2_ENV_VARS[field]);
+      return !value;
+    })
+    .map(([, envVar]) => envVar);
+
+  const suffix = context ? ` for ${context}` : "";
+  const missingText = missing.length > 0 ? ` Missing: ${missing.join(", ")}` : "";
+  throw new Error(
+    `R2 configuration is missing required fields${suffix}.${missingText}`,
+  );
+};
 
 export interface RegisterRoutesOptions {
   /** Prefix for HTTP routes, defaults to "/files". */
@@ -57,6 +116,10 @@ export interface RegisterRoutesOptions {
   passwordHeader?: string;
   enableUploadRoute?: boolean;
   enableDownloadRoute?: boolean;
+  /** Default provider when not supplied in the upload form. */
+  defaultUploadProvider?: StorageProvider;
+  /** R2 credentials for server-side upload/download/cleanup. */
+  r2?: R2ConfigInput;
   /**
    * Optional hook for rate limiting or request validation. Return a Response to
    * short-circuit the request (e.g. 429).
@@ -106,6 +169,8 @@ export function registerRoutes(
     passwordHeader = "x-download-password",
     enableUploadRoute = false,
     enableDownloadRoute = true,
+    defaultUploadProvider = "convex",
+    r2,
     checkDownloadRequest,
   } = options;
 
@@ -152,13 +217,33 @@ export function registerRoutes(
           return jsonError("'expiresAt' must be a number or null", 400);
         }
 
-        const { uploadUrl, uploadToken } = await ctx.runMutation(
-          component.upload.generateUploadUrl,
-          {},
-        );
+        const providerRaw = formData.get(uploadFormFields.provider);
+        const providerValue =
+          typeof providerRaw === "string" ? providerRaw : "";
+        const provider = isStorageProvider(providerValue)
+          ? providerValue
+          : defaultUploadProvider;
+
+        let r2Config: R2Config | undefined = undefined;
+        if (provider === "r2") {
+          try {
+            r2Config = requireR2Config(r2, "R2 uploads");
+          } catch (error) {
+            return jsonError(
+              error instanceof Error ? error.message : "R2 configuration missing.",
+              500,
+            );
+          }
+        }
+
+        const { uploadUrl, uploadToken, storageId: presetStorageId } =
+          await ctx.runMutation(component.upload.generateUploadUrl, {
+            provider,
+            r2Config,
+          });
 
         const uploadResponse = await fetch(uploadUrl, {
-          method: "POST",
+          method: provider === "r2" ? "PUT" : "POST",
           headers: { "Content-Type": file.type || "application/octet-stream" },
           body: file,
         });
@@ -167,10 +252,14 @@ export function registerRoutes(
           return jsonError("File upload failed", 502);
         }
 
-        const uploadPayload = (await uploadResponse.json()) as {
-          storageId?: string;
-        };
-        const storageId = uploadPayload.storageId;
+        let storageId = presetStorageId ?? null;
+        if (provider === "convex") {
+          const uploadPayload = (await uploadResponse.json()) as {
+            storageId?: string;
+          };
+          storageId = uploadPayload.storageId ?? null;
+        }
+
         if (!storageId) {
           return jsonError("Upload did not return storageId", 502);
         }
@@ -231,7 +320,12 @@ export function registerRoutes(
 
         const result = await ctx.runMutation(
           component.download.consumeDownloadGrantForUrl,
-          { downloadToken, accessKey, password },
+          {
+            downloadToken,
+            accessKey,
+            password,
+            r2Config: resolveR2Config(r2) ?? undefined,
+          },
         );
 
         if (result.status !== "ok" || !result.downloadUrl) {
@@ -320,10 +414,12 @@ const asPendingUploadId = (value: string) => value as Id<"pendingUploads">;
 const toFileSummary = (file: {
   _id: string;
   storageId: string;
+  storageProvider: StorageProvider;
   expiresAt: number | null;
 }) => ({
   _id: asFileId(file._id),
   storageId: file.storageId,
+  storageProvider: file.storageProvider,
   expiresAt: file.expiresAt,
 });
 
@@ -355,15 +451,25 @@ type RunMutationCtx = {
   runMutation: GenericMutationCtx<GenericDataModel>["runMutation"];
 };
 
+type RunActionCtx = {
+  runAction: GenericActionCtx<GenericDataModel>["runAction"];
+};
+
 type FinalizeUploadArgs = {
   uploadToken: Id<"pendingUploads">;
   storageId: string;
   accessKeys: string[];
   expiresAt?: number | null;
+  metadata?: {
+    size: number;
+    sha256: string;
+    contentType: string | null;
+  };
 };
 
 type RegisterFileArgs = {
   storageId: string;
+  storageProvider: StorageProvider;
   accessKeys: string[];
   expiresAt?: number | null;
   metadata?: {
@@ -384,6 +490,7 @@ type DownloadConsumeArgs = {
   downloadToken: Id<"downloadGrants">;
   accessKey?: string;
   password?: string;
+  r2Config?: R2Config;
 };
 
 type DownloadRequestArgs = {
@@ -435,6 +542,7 @@ export type FilesControlHooks<DataModel extends GenericDataModel> = {
     ctx: GenericMutationCtx<DataModel>,
     args: {
       storageId: string;
+      storageProvider: StorageProvider;
       accessKeys: string[];
       expiresAt?: number | null;
     },
@@ -490,10 +598,38 @@ export type FilesControlHooks<DataModel extends GenericDataModel> = {
  * ```
  */
 export class FilesControl {
-  constructor(public component: ComponentApi) {}
+  private r2ConfigInput?: R2ConfigInput;
+  private resolvedR2Config: R2Config | null;
 
-  async generateUploadUrl(ctx: RunMutationCtx) {
-    return ctx.runMutation(this.component.upload.generateUploadUrl, {});
+  constructor(
+    public component: ComponentApi,
+    options: { r2?: R2ConfigInput } = {},
+  ) {
+    this.r2ConfigInput = options.r2;
+    this.resolvedR2Config = resolveR2Config(options.r2);
+  }
+
+  private maybeR2Config(override?: R2Config) {
+    return override ?? this.resolvedR2Config ?? undefined;
+  }
+
+  private requireR2Config(context?: string, override?: R2Config) {
+    return override ?? requireR2Config(this.r2ConfigInput, context);
+  }
+
+  async generateUploadUrl(
+    ctx: RunMutationCtx,
+    args: { provider?: StorageProvider; r2Config?: R2Config } = {},
+  ) {
+    const provider = args.provider ?? "convex";
+    const r2Config =
+      provider === "r2"
+        ? this.requireR2Config("R2 uploads", args.r2Config)
+        : undefined;
+    return ctx.runMutation(this.component.upload.generateUploadUrl, {
+      provider,
+      r2Config,
+    });
   }
 
   async finalizeUpload(ctx: RunMutationCtx, args: FinalizeUploadArgs) {
@@ -512,10 +648,11 @@ export class FilesControl {
     ctx: RunMutationCtx,
     args: DownloadConsumeArgs,
   ) {
-    return ctx.runMutation(
-      this.component.download.consumeDownloadGrantForUrl,
-      args,
-    );
+    const { r2Config, ...rest } = args;
+    return ctx.runMutation(this.component.download.consumeDownloadGrantForUrl, {
+      ...rest,
+      r2Config: this.maybeR2Config(r2Config),
+    });
   }
 
   async addAccessKey(ctx: RunMutationCtx, args: AccessKeyArgs) {
@@ -533,12 +670,50 @@ export class FilesControl {
     return ctx.runMutation(this.component.accessControl.updateFileExpiration, args);
   }
 
-  async deleteFile(ctx: RunMutationCtx, args: { storageId: string }) {
-    return ctx.runMutation(this.component.cleanUp.deleteFile, args);
+  async deleteFile(
+    ctx: RunMutationCtx,
+    args: { storageId: string; r2Config?: R2Config },
+  ) {
+    return ctx.runMutation(this.component.cleanUp.deleteFile, {
+      storageId: args.storageId,
+      r2Config: this.maybeR2Config(args.r2Config),
+    });
   }
 
-  async cleanupExpired(ctx: RunMutationCtx, args: { limit?: number }) {
-    return ctx.runMutation(this.component.cleanUp.cleanupExpired, args);
+  async cleanupExpired(
+    ctx: RunMutationCtx,
+    args: { limit?: number; r2Config?: R2Config },
+  ) {
+    return ctx.runMutation(this.component.cleanUp.cleanupExpired, {
+      limit: args.limit,
+      r2Config: this.maybeR2Config(args.r2Config),
+    });
+  }
+
+  async computeR2Metadata(
+    ctx: RunActionCtx,
+    args: { storageId: string; r2Config?: R2Config },
+  ) {
+    const r2Config = this.requireR2Config("R2 metadata", args.r2Config);
+    return ctx.runAction(this.component.upload.computeR2Metadata, {
+      storageId: args.storageId,
+      r2Config,
+    });
+  }
+
+  async transferFile(
+    ctx: RunActionCtx,
+    args: { storageId: string; targetProvider: StorageProvider; r2Config?: R2Config },
+  ) {
+    const r2Config =
+      args.targetProvider === "r2"
+        ? this.requireR2Config("R2 transfers", args.r2Config)
+        : this.maybeR2Config(args.r2Config);
+    return ctx.runAction(this.component.transfer.transferFile, {
+      storageId: args.storageId,
+      targetProvider: args.targetProvider,
+      r2Config,
+    });
   }
 
   async getFile(ctx: RunQueryCtx, args: { storageId: string }) {
@@ -585,18 +760,24 @@ export class FilesControl {
   ) {
     return {
       generateUploadUrl: mutationGeneric({
-        args: {},
+        args: {
+          provider: storageProviderValidator,
+        },
         returns: v.object({
           uploadUrl: v.string(),
           uploadToken: v.id("pendingUploads"),
           uploadTokenExpiresAt: v.number(),
+          storageProvider: storageProviderValidator,
+          storageId: v.union(v.string(), v.null()),
         }),
-        handler: async (ctx) => {
+        handler: async (ctx, args) => {
           if (opts.checkUpload) {
             await opts.checkUpload(ctx);
           }
 
-          const result = await this.generateUploadUrl(ctx);
+          const result = await this.generateUploadUrl(ctx, {
+            provider: args.provider,
+          });
           return {
             ...result,
             uploadToken: asPendingUploadId(result.uploadToken),
@@ -609,11 +790,13 @@ export class FilesControl {
           storageId: v.string(),
           accessKeys: v.array(v.string()),
           expiresAt: v.optional(v.union(v.null(), v.number())),
+          metadata: v.optional(fileMetadataInputValidator),
         },
         returns: v.object({
           storageId: v.string(),
+          storageProvider: storageProviderValidator,
           expiresAt: v.union(v.null(), v.number()),
-          metadata: fileMetadataValidator,
+          metadata: v.union(fileMetadataValidator, v.null()),
         }),
         handler: async (ctx, args) => {
           if (opts.checkUpload) {
@@ -624,15 +807,18 @@ export class FilesControl {
           const coerced = {
             ...result,
             storageId: result.storageId,
-            metadata: {
-              ...result.metadata,
-              storageId: result.metadata.storageId,
-            },
+            metadata: result.metadata
+              ? {
+                  ...result.metadata,
+                  storageId: result.metadata.storageId,
+                }
+              : null,
           };
 
           if (opts.onUpload) {
             await opts.onUpload(ctx, {
               storageId: args.storageId,
+              storageProvider: result.storageProvider,
               accessKeys: args.accessKeys,
               expiresAt: args.expiresAt ?? null,
             });
@@ -644,14 +830,16 @@ export class FilesControl {
       registerFile: mutationGeneric({
         args: {
           storageId: v.string(),
+          storageProvider: storageProviderValidator,
           accessKeys: v.array(v.string()),
           expiresAt: v.optional(v.union(v.null(), v.number())),
           metadata: v.optional(fileMetadataInputValidator),
         },
         returns: v.object({
           storageId: v.string(),
+          storageProvider: storageProviderValidator,
           expiresAt: v.union(v.null(), v.number()),
-          metadata: fileMetadataValidator,
+          metadata: v.union(fileMetadataValidator, v.null()),
         }),
         handler: async (ctx, args) => {
           if (opts.checkUpload) {
@@ -662,15 +850,18 @@ export class FilesControl {
           const coerced = {
             ...result,
             storageId: result.storageId,
-            metadata: {
-              ...result.metadata,
-              storageId: result.metadata.storageId,
-            },
+            metadata: result.metadata
+              ? {
+                  ...result.metadata,
+                  storageId: result.metadata.storageId,
+                }
+              : null,
           };
 
           if (opts.onUpload) {
             await opts.onUpload(ctx, {
               storageId: args.storageId,
+              storageProvider: args.storageProvider,
               accessKeys: args.accessKeys,
               expiresAt: args.expiresAt ?? null,
             });

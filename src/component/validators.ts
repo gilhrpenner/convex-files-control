@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import schema from "./schema";
+import { storageProviderValidator } from "./storageProvider";
 
 const downloadGrantFields = schema.tables.downloadGrants.validator.fields;
 
@@ -32,6 +33,7 @@ export const fileMetadataInputValidator = v.object({
 export const fileSummaryValidator = v.object({
   _id: v.id("files"),
   storageId: v.string(),
+  storageProvider: storageProviderValidator,
   expiresAt: v.union(v.number(), v.null()),
 });
 
@@ -47,6 +49,7 @@ export const downloadGrantSummaryValidator = v.object({
 export type FileSummary = {
   _id: Id<"files">;
   storageId: string;
+  storageProvider: "convex" | "r2";
   expiresAt: number | null;
 };
 
@@ -63,6 +66,7 @@ export function toFileSummary(file: Doc<"files">): FileSummary {
   return {
     _id: file._id,
     storageId: file.storageId,
+    storageProvider: file.storageProvider,
     expiresAt: file.expiresAt ?? null,
   };
 }
