@@ -1,6 +1,7 @@
 import { httpRouter } from "convex/server";
 import { registerRoutes } from "@gilhrpenner/convex-files-control";
 import { components } from "./_generated/api";
+import { getR2ConfigFromEnv } from "./r2Config";
 
 const http = httpRouter();
 
@@ -10,6 +11,7 @@ registerRoutes(http, components.convexFilesControl, {
   requireAccessKey: true,
   accessKeyQueryParam: "testAccessKey",
   enableUploadRoute: true,
+  r2: getR2ConfigFromEnv() ?? undefined,
 });
 
 // You can also register routes at different paths

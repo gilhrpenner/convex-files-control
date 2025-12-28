@@ -10,6 +10,8 @@ import { api, components, internal } from "./_generated/api";
 import { findFileByStorageId, toStorageId } from "./lib";
 import { DEFAULT_CLEANUP_LIMIT } from "./constants";
 import { ActionRetrier } from "@convex-dev/action-retrier";
+import { storageProviderValidator } from "./storageProvider";
+import { deleteR2Object, r2ConfigValidator, requireR2Config } from "./r2";
 
 const retrier = new ActionRetrier(components.actionRetrier);
 
@@ -35,27 +37,58 @@ const useActionRetrier =
 export const deleteStorageFile = action({
   args: {
     storageId: v.string(),
+    storageProvider: storageProviderValidator,
+    r2Config: v.optional(r2ConfigValidator),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await ctx.storage.delete(toStorageId(args.storageId));
+    if (args.storageProvider === "convex") {
+      await ctx.storage.delete(toStorageId(args.storageId));
+      return null;
+    }
+
+    const r2Config = requireR2Config(args.r2Config, "R2 deletes");
+    await deleteR2Object(r2Config, args.storageId);
     return null;
   },
 });
 
 async function deleteStorageFileWithRetry(
   ctx: MutationCtx,
-  storageId: string,
+  args: {
+    storageId: string;
+    storageProvider: "convex" | "r2";
+    r2Config?: {
+      accountId: string;
+      accessKeyId: string;
+      secretAccessKey: string;
+      bucketName: string;
+    };
+  },
 ) {
   if (!useActionRetrier) {
-    await ctx.storage.delete(toStorageId(storageId));
+    if (args.storageProvider === "convex") {
+      await ctx.storage.delete(toStorageId(args.storageId));
+      return;
+    }
+    const r2Config = requireR2Config(args.r2Config, "R2 deletes");
+    await deleteR2Object(r2Config, args.storageId);
     return;
   }
 
-  await retrier.run(ctx, api.cleanUp.deleteStorageFile, { storageId });
+  await retrier.run(ctx, api.cleanUp.deleteStorageFile, args);
 }
 
-async function deleteFileCascadeCore(ctx: MutationCtx, file: Doc<"files">) {
+async function deleteFileCascadeCore(
+  ctx: MutationCtx,
+  file: Doc<"files">,
+  r2Config?: {
+    accountId: string;
+    accessKeyId: string;
+    secretAccessKey: string;
+    bucketName: string;
+  },
+) {
   const storageId = file.storageId;
   const [accessRows, grants] = await Promise.all([
     ctx.db
@@ -70,7 +103,11 @@ async function deleteFileCascadeCore(ctx: MutationCtx, file: Doc<"files">) {
 
   await Promise.all([
     ctx.db.delete(file._id),
-    deleteStorageFileWithRetry(ctx, storageId),
+    deleteStorageFileWithRetry(ctx, {
+      storageId,
+      storageProvider: file.storageProvider,
+      r2Config,
+    }),
     ...accessRows.map((row) => ctx.db.delete(row._id)),
     ...grants.map((grant) => ctx.db.delete(grant._id)),
   ]);
@@ -79,13 +116,19 @@ async function deleteFileCascadeCore(ctx: MutationCtx, file: Doc<"files">) {
 export async function deleteFileCascade(
   ctx: MutationCtx,
   storageId: string,
+  r2Config?: {
+    accountId: string;
+    accessKeyId: string;
+    secretAccessKey: string;
+    bucketName: string;
+  },
 ) {
   const file = await findFileByStorageId(ctx, storageId);
   if (!file) {
     return;
   }
 
-  await deleteFileCascadeCore(ctx, file);
+  await deleteFileCascadeCore(ctx, file, r2Config);
 }
 
 /**
@@ -106,6 +149,7 @@ export async function deleteFileCascade(
 export const deleteFile = mutation({
   args: {
     storageId: v.string(),
+    r2Config: v.optional(r2ConfigValidator),
   },
   returns: v.object({
     deleted: v.boolean(),
@@ -116,14 +160,22 @@ export const deleteFile = mutation({
       return { deleted: false };
     }
 
-    await deleteFileCascadeCore(ctx, file);
+    await deleteFileCascadeCore(ctx, file, args.r2Config);
     return { deleted: true };
   },
 });
 
 async function cleanupExpiredCore(
   ctx: MutationCtx,
-  args: { limit?: number },
+  args: {
+    limit?: number;
+    r2Config?: {
+      accountId: string;
+      accessKeyId: string;
+      secretAccessKey: string;
+      bucketName: string;
+    };
+  },
 ) {
   const now = Date.now();
   const limit = args.limit ?? DEFAULT_CLEANUP_LIMIT;
@@ -146,7 +198,7 @@ async function cleanupExpiredCore(
   await Promise.all([
     ...expiredUploads.map((u) => ctx.db.delete(u._id)),
     ...expiredGrants.map((g) => ctx.db.delete(g._id)),
-    ...expiredFiles.map((f) => deleteFileCascadeCore(ctx, f)),
+    ...expiredFiles.map((f) => deleteFileCascadeCore(ctx, f, args.r2Config)),
   ]);
 
   const deletedCount =
@@ -159,6 +211,7 @@ async function cleanupExpiredCore(
   if (hasMore) {
     await ctx.scheduler.runAfter(0, internal.cleanUp.cleanupExpiredInternal, {
       limit,
+      r2Config: args.r2Config,
     });
   }
 
@@ -189,6 +242,7 @@ async function cleanupExpiredCore(
 export const cleanupExpired = mutation({
   args: {
     limit: v.optional(v.number()),
+    r2Config: v.optional(r2ConfigValidator),
   },
   returns: v.object({
     deletedCount: v.number(),
@@ -202,6 +256,7 @@ export const cleanupExpired = mutation({
 export const cleanupExpiredInternal = internalMutation({
   args: {
     limit: v.optional(v.number()),
+    r2Config: v.optional(r2ConfigValidator),
   },
   returns: v.object({
     deletedCount: v.number(),

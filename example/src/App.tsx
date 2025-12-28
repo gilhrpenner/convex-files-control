@@ -2,7 +2,11 @@ import "./App.css";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { useEffect, useMemo, useState } from "react";
-import { useUploadFile, type UploadMethod } from "@gilhrpenner/convex-files-control/react";
+import {
+  useUploadFile,
+  type UploadMethod,
+} from "@gilhrpenner/convex-files-control/react";
+import type { StorageProvider } from "@gilhrpenner/convex-files-control";
 import { DesktopLayout } from "./components/DesktopLayout";
 import { OSWindow } from "./components/OSWindow";
 import { ScreenWithDocs } from "./components/ScreenWithDocs";
@@ -29,6 +33,7 @@ function App() {
   );
 
   const [uploadMethod, setUploadMethod] = useState<UploadMethod>("presigned");
+  const [uploadProvider, setUploadProvider] = useState<StorageProvider>("convex");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [accessKey, setAccessKey] = useState("test_user");
   const [expiresAt, setExpiresAt] = useState("");
@@ -97,7 +102,13 @@ function App() {
         accessKeys: [trimmedAccessKey],
         expiresAt: expiresAtResult.value,
         method: uploadMethod,
+        provider: uploadProvider,
       });
+
+      if (!uploadResult.metadata) {
+        setUploadStatus("Upload complete, but metadata is unavailable.");
+        return;
+      }
 
       await storeCustomFile({
         storageId: uploadResult.storageId,
@@ -186,6 +197,17 @@ function App() {
                   onChange={() => setUploadMethod("http")}
                 />
               </div>
+
+              <RetroSelect
+                label="STORAGE PROVIDER"
+                value={uploadProvider}
+                onChange={(event) =>
+                  setUploadProvider(event.target.value as StorageProvider)
+                }
+              >
+                <option value="convex">Convex Storage</option>
+                <option value="r2">Cloudflare R2</option>
+              </RetroSelect>
 
               <div
                 style={{

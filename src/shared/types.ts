@@ -1,3 +1,12 @@
+export type StorageProvider = "convex" | "r2";
+
+export type R2Config = {
+  accountId: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  bucketName: string;
+};
+
 export type UploadMetadata = {
   storageId: string;
   size: number;
@@ -7,6 +16,13 @@ export type UploadMetadata = {
 
 export type UploadResult = {
   storageId: string;
+  storageProvider: StorageProvider;
   expiresAt: number | null;
-  metadata: UploadMetadata;
+  metadata: UploadMetadata | null;
 };
+
+export function isStorageProvider(
+  value: unknown,
+): value is StorageProvider {
+  return value === "convex" || value === "r2";
+}

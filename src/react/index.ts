@@ -8,7 +8,7 @@ import {
   buildEndpointUrl,
   uploadFormFields,
 } from "../shared";
-import type { UploadResult } from "../shared";
+import type { StorageProvider, UploadResult } from "../shared";
 
 export type UploadMethod = "presigned" | "http";
 export type { UploadMetadata, UploadResult } from "../shared";
@@ -25,11 +25,13 @@ export type UploadFileArgs = {
   expiresAt?: number | null;
   method?: UploadMethod;
   http?: HttpUploadOptions;
+  provider?: StorageProvider;
 };
 
 export type UseUploadFileOptions = {
   method?: UploadMethod;
   http?: HttpUploadOptions;
+  provider?: StorageProvider;
 };
 
 export type UploadApi = {
@@ -80,9 +82,11 @@ export function useUploadFile<Api extends UploadApi>(
   const uploadViaPresignedUrl = useCallback(
     async (args: UploadFileArgs): Promise<UploadResult> => {
       const { file, accessKeys, expiresAt } = args;
-      const { uploadUrl, uploadToken } = await generateUploadUrl();
+      const provider = args.provider ?? options.provider ?? "convex";
+      const { uploadUrl, uploadToken, storageId: presetStorageId } =
+        await generateUploadUrl({ provider });
       const uploadResponse = await fetch(uploadUrl, {
-        method: "POST",
+        method: provider === "r2" ? "PUT" : "POST",
         headers: {
           "Content-Type": file.type || "application/octet-stream",
         },
@@ -93,27 +97,32 @@ export function useUploadFile<Api extends UploadApi>(
         throw new Error(`Upload failed: ${uploadResponse.statusText}`);
       }
 
-      const uploadPayload = (await uploadResponse.json()) as {
-        storageId?: string;
-      };
+      let storageId: string | null = presetStorageId ?? null;
+      if (provider === "convex") {
+        const uploadPayload = (await uploadResponse.json()) as {
+          storageId?: string;
+        };
+        storageId = uploadPayload.storageId ?? null;
+      }
 
-      if (!uploadPayload.storageId) {
+      if (!storageId) {
         throw new Error("Upload did not return a storageId.");
       }
 
       return await finalizeUpload({
         uploadToken,
-        storageId: uploadPayload.storageId,
+        storageId,
         accessKeys,
         expiresAt,
       });
     },
-    [generateUploadUrl, finalizeUpload],
+    [generateUploadUrl, finalizeUpload, options.provider],
   );
 
   const uploadViaHttpAction = useCallback(
     async (args: UploadFileArgs): Promise<UploadResult> => {
       const { file, accessKeys, expiresAt } = args;
+      const provider = args.provider ?? options.provider ?? "convex";
       const uploadUrl = resolveUploadUrl(args.http ?? options.http);
       if (!uploadUrl) {
         throw new Error(
@@ -127,6 +136,7 @@ export function useUploadFile<Api extends UploadApi>(
         uploadFormFields.accessKeys,
         JSON.stringify(accessKeys),
       );
+      formData.append(uploadFormFields.provider, provider);
       if (expiresAt !== undefined) {
         formData.append(
           uploadFormFields.expiresAt,
@@ -156,7 +166,7 @@ export function useUploadFile<Api extends UploadApi>(
 
       return payload as UploadResult;
     },
-    [options.http],
+    [options.http, options.provider],
   );
 
   const uploadFile = useCallback(

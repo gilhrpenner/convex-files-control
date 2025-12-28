@@ -14,6 +14,9 @@ import type * as constants from "../constants.js";
 import type * as download from "../download.js";
 import type * as lib from "../lib.js";
 import type * as queries from "../queries.js";
+import type * as r2 from "../r2.js";
+import type * as storageProvider from "../storageProvider.js";
+import type * as transfer from "../transfer.js";
 import type * as upload from "../upload.js";
 import type * as validators from "../validators.js";
 
@@ -31,6 +34,9 @@ const fullApi: ApiFromModules<{
   download: typeof download;
   lib: typeof lib;
   queries: typeof queries;
+  r2: typeof r2;
+  storageProvider: typeof storageProvider;
+  transfer: typeof transfer;
   upload: typeof upload;
   validators: typeof validators;
 }> = anyApi as any;

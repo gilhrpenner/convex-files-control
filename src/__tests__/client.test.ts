@@ -273,6 +273,7 @@ describe("registerRoutes", () => {
     const uploadToken = "upload-token";
     const finalizeResult = {
       storageId: "storage",
+      storageProvider: "convex",
       expiresAt: null,
       metadata: {
         storageId: "storage",
@@ -284,7 +285,13 @@ describe("registerRoutes", () => {
 
     const runMutation = vi.fn(async (ref, _args) => {
       if (ref === component.upload.generateUploadUrl) {
-        return { uploadUrl, uploadToken };
+        return {
+          uploadUrl,
+          uploadToken,
+          uploadTokenExpiresAt: Date.now(),
+          storageProvider: "convex",
+          storageId: null,
+        };
       }
       if (ref === component.upload.finalizeUpload) {
         return finalizeResult;
@@ -316,7 +323,10 @@ describe("registerRoutes", () => {
     const payload = await response.json();
     expect(payload).toEqual(finalizeResult);
 
-    expect(runMutation).toHaveBeenCalledWith(component.upload.generateUploadUrl, {});
+    expect(runMutation).toHaveBeenCalledWith(
+      component.upload.generateUploadUrl,
+      { provider: "convex", r2Config: undefined },
+    );
     expect(runMutation).toHaveBeenCalledWith(component.upload.finalizeUpload, {
       uploadToken,
       storageId: "storage",
@@ -361,7 +371,13 @@ describe("registerRoutes", () => {
     const uploadUrl = "https://upload.example.com";
     const runMutation = vi.fn(async (ref) => {
       if (ref === component.upload.generateUploadUrl) {
-        return { uploadUrl, uploadToken: "token" };
+        return {
+          uploadUrl,
+          uploadToken: "token",
+          uploadTokenExpiresAt: Date.now(),
+          storageProvider: "convex",
+          storageId: null,
+        };
       }
       return null;
     });
@@ -537,6 +553,7 @@ describe("helpers", () => {
       file: "file",
       accessKeys: "accessKeys",
       expiresAt: "expiresAt",
+      provider: "provider",
     });
   });
 });
