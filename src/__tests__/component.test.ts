@@ -2,9 +2,10 @@ import { describe, expect, test, vi } from "vitest";
 import { api } from "../component/_generated/api.js";
 import type { Id } from "../component/_generated/dataModel.js";
 import { deleteFileCascade } from "../component/cleanUp.js";
-import { normalizeAccessKeys } from "../component/lib.js";
+import { hashPassword, normalizeAccessKeys } from "../component/lib.js";
 import schema from "../component/schema.js";
 import { initConvexTest } from "../component/setup.test.js";
+import * as r2 from "../component/r2.js";
 
 type TestContext = ReturnType<typeof initConvexTest>;
 type StorageId = string;
@@ -635,6 +636,28 @@ describe("download", () => {
 
     expect(invalidPassword).toEqual({ status: "invalid_password" });
 
+    const legacyPassword = await hashPassword("secret");
+    const legacyGrant = await t.run(async (ctx) => {
+      return await ctx.db.insert("downloadGrants", {
+        storageId: passwordStorage,
+        maxUses: null,
+        useCount: 0,
+        passwordHash: legacyPassword.hash,
+        passwordAlgorithm: legacyPassword.algorithm,
+      });
+    });
+
+    const legacyInvalid = await t.mutation(
+      api.download.consumeDownloadGrantForUrl,
+      {
+        downloadToken: legacyGrant,
+        accessKey: "pw",
+        password: "secret",
+      },
+    );
+
+    expect(legacyInvalid).toEqual({ status: "invalid_password" });
+
     const okPassword = await t.mutation(api.download.consumeDownloadGrantForUrl, {
       downloadToken: passwordGrant.downloadToken,
       accessKey: "pw",
@@ -745,6 +768,44 @@ describe("download", () => {
     expect(missingBlobGrantAfter).not.toBeNull();
     expect(missingBlobGrantAfter?.useCount).toBe(0);
   });
+
+  test("consumeDownloadGrantForUrl returns r2 download url", async () => {
+    const t = initConvexTest();
+    const r2Config = {
+      accountId: "acct",
+      accessKeyId: "access",
+      secretAccessKey: "secret",
+      bucketName: "bucket",
+    };
+
+    const storageId = "r2-storage";
+    await t.mutation(api.upload.registerFile, {
+      storageId,
+      storageProvider: "r2",
+      accessKeys: ["key"],
+      metadata: { size: 1, sha256: "hash", contentType: null },
+    });
+
+    const grant = await t.mutation(api.download.createDownloadGrant, {
+      storageId,
+    });
+
+    const spy = vi
+      .spyOn(r2, "getR2DownloadUrl")
+      .mockResolvedValue("https://r2.example.com");
+
+    const result = await t.mutation(api.download.consumeDownloadGrantForUrl, {
+      downloadToken: grant.downloadToken,
+      accessKey: "key",
+      r2Config,
+    });
+
+    expect(result).toEqual({
+      status: "ok",
+      downloadUrl: "https://r2.example.com",
+    });
+    expect(spy).toHaveBeenCalledWith(r2Config, storageId);
+  });
 });
 
 describe("cleanUp", () => {
@@ -824,6 +885,61 @@ describe("cleanUp", () => {
     });
 
     expect(deleted).toEqual({ deleted: true });
+  });
+
+  test("deleteStorageFile action deletes convex and r2", async () => {
+    const t = initConvexTest();
+    const { storageId } = await createStorageFile(t, "delete-action");
+
+    await t.action(api.cleanUp.deleteStorageFile, {
+      storageId,
+      storageProvider: "convex",
+    });
+
+    const r2Config = {
+      accountId: "acct",
+      accessKeyId: "access",
+      secretAccessKey: "secret",
+      bucketName: "bucket",
+    };
+
+    const r2Spy = vi.spyOn(r2, "deleteR2Object").mockResolvedValue(undefined);
+    await t.action(api.cleanUp.deleteStorageFile, {
+      storageId: "r2-object",
+      storageProvider: "r2",
+      r2Config,
+    });
+
+    expect(r2Spy).toHaveBeenCalledWith(r2Config, "r2-object");
+  });
+
+  test("deleteFile uses r2 deletion path", async () => {
+    const t = initConvexTest();
+    const r2Config = {
+      accountId: "acct",
+      accessKeyId: "access",
+      secretAccessKey: "secret",
+      bucketName: "bucket",
+    };
+
+    const storageId = "r2-delete";
+    const fileId = await insertFileRecord(t, storageId, undefined, "r2");
+    await insertFileAccess(t, fileId, storageId, "key");
+    await insertDownloadGrant(t, {
+      storageId,
+      maxUses: null,
+      useCount: 0,
+    });
+
+    const r2Spy = vi.spyOn(r2, "deleteR2Object").mockResolvedValue(undefined);
+
+    const deleted = await t.mutation(api.cleanUp.deleteFile, {
+      storageId,
+      r2Config,
+    });
+
+    expect(deleted).toEqual({ deleted: true });
+    expect(r2Spy).toHaveBeenCalledWith(r2Config, storageId);
   });
 
   test("cleanupExpired deletes expired records", async () => {

@@ -22,6 +22,7 @@ export default [
       parserOptions: {
         project: [
           "./tsconfig.json",
+          "./tsconfig.test.json",
           "./example/tsconfig.json",
           "./example/convex/tsconfig.json",
         ],
