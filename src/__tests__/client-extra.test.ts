@@ -122,6 +122,15 @@ describe("registerRoutes extra coverage", () => {
     expect(getRoute(router, "/files/upload", "POST")).toBeDefined();
   });
 
+  test("upload route requires checkUploadRequest when enabled", () => {
+    const router = createRouter();
+    expect(() =>
+      registerRoutes(router, component, { enableUploadRoute: true }),
+    ).toThrow(
+      "checkUploadRequest is required when enableUploadRoute is true. This hook must authenticate the request and return { accessKeys }.",
+    );
+  });
+
   test("download route short-circuits with checkDownloadRequest", async () => {
     const router = createRouter();
     const checkDownloadRequest = vi.fn(() =>
@@ -142,6 +151,67 @@ describe("registerRoutes extra coverage", () => {
 
     expect(response.status).toBe(429);
     expect(runMutation).not.toHaveBeenCalled();
+  });
+
+  test("download route uses accessKey from checkDownloadRequest", async () => {
+    const router = createRouter();
+    const checkDownloadRequest = vi.fn(async () => ({ accessKey: "from-hook" }));
+    registerRoutes(router, component, { checkDownloadRequest });
+
+    const downloadRoute = getRoute(router, "/files/download", "GET");
+    const handler = getHandler(downloadRoute?.handler);
+
+    const runMutation = vi.fn(async () => ({
+      status: "ok",
+      downloadUrl: "https://file.example.com",
+    }));
+    const ctx = makeCtx(runMutation);
+
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("file", { status: 200 })));
+
+    await handler(
+      ctx,
+      buildDownloadRequest("https://example.com/files/download?token=token"),
+    );
+
+    expect(runMutation).toHaveBeenCalledWith(
+      component.download.consumeDownloadGrantForUrl,
+      expect.objectContaining({
+        downloadToken: "token",
+        accessKey: "from-hook",
+        password: undefined,
+      }),
+    );
+  });
+
+  test("download route ignores checkDownloadRequest without accessKey", async () => {
+    const router = createRouter();
+    const checkDownloadRequest = vi.fn(async () => ({}));
+    registerRoutes(router, component, { checkDownloadRequest });
+
+    const downloadRoute = getRoute(router, "/files/download", "GET");
+    const handler = getHandler(downloadRoute?.handler);
+
+    const runMutation = vi.fn(async () => ({
+      status: "ok",
+      downloadUrl: "https://file.example.com",
+    }));
+    const ctx = makeCtx(runMutation);
+
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("file", { status: 200 })));
+
+    await handler(
+      ctx,
+      buildDownloadRequest("https://example.com/files/download?token=token"),
+    );
+
+    expect(runMutation).toHaveBeenCalledWith(
+      component.download.consumeDownloadGrantForUrl,
+      expect.objectContaining({
+        downloadToken: "token",
+        accessKey: undefined,
+      }),
+    );
   });
 
   test("download route reads r2 config from env and handles disabled password params", async () => {
@@ -190,6 +260,81 @@ describe("registerRoutes extra coverage", () => {
     delete process.env.R2_ACCESS_KEY_ID;
     delete process.env.R2_SECRET_ACCESS_KEY;
     delete process.env.R2_BUCKET_NAME;
+  });
+
+  test("upload route rejects invalid checkUploadRequest results", async () => {
+    const router = createRouter();
+    const checkUploadRequest = vi.fn(async () => null);
+    registerRoutes(router, component, {
+      enableUploadRoute: true,
+      checkUploadRequest,
+    });
+
+    const uploadRoute = getRoute(router, "/files/upload", "POST");
+    const handler = getHandler(uploadRoute?.handler);
+
+    const request = buildUploadRequest({
+      [uploadFormFields.file]: new File(["file"], "name.txt", {
+        type: "text/plain",
+      }),
+    });
+
+    const response = await handler(makeCtx(), request);
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      error: "checkUploadRequest must return accessKeys",
+    });
+  });
+
+  test("upload route short-circuits when checkUploadRequest returns Response", async () => {
+    const router = createRouter();
+    const checkUploadRequest = vi.fn(async () =>
+      new Response("blocked", { status: 401 }),
+    );
+    registerRoutes(router, component, {
+      enableUploadRoute: true,
+      checkUploadRequest,
+    });
+
+    const uploadRoute = getRoute(router, "/files/upload", "POST");
+    const handler = getHandler(uploadRoute?.handler);
+
+    const request = buildUploadRequest({
+      [uploadFormFields.file]: new File(["file"], "name.txt", {
+        type: "text/plain",
+      }),
+    });
+    request.headers.set("Origin", "https://origin.example");
+
+    const response = await handler(makeCtx(), request);
+    expect(response.status).toBe(401);
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe(
+      "https://origin.example",
+    );
+  });
+
+  test("upload route rejects empty accessKeys", async () => {
+    const router = createRouter();
+    const checkUploadRequest = vi.fn(async () => ({ accessKeys: [] }));
+    registerRoutes(router, component, {
+      enableUploadRoute: true,
+      checkUploadRequest,
+    });
+
+    const uploadRoute = getRoute(router, "/files/upload", "POST");
+    const handler = getHandler(uploadRoute?.handler);
+
+    const request = buildUploadRequest({
+      [uploadFormFields.file]: new File(["file"], "name.txt", {
+        type: "text/plain",
+      }),
+    });
+
+    const response = await handler(makeCtx(), request);
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      error: "checkUploadRequest must return accessKeys",
+    });
   });
 
   test("upload route fails when r2 config missing", async () => {

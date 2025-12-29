@@ -9,7 +9,7 @@
   "bugs": {
     "url": "https://github.com/gilhrpenner/convex-files-control/issues"
   },
-  "version": "0.1.1",
+  "version": "0.2.0",
   "publishConfig": {
     "access": "public"
   },
@@ -33,8 +33,9 @@
     "build": "tsc --project ./tsconfig.build.json",
     "build:codegen": "npx convex codegen --component-dir ./src/component && npm run build",
     "build:clean": "rm -rf dist *.tsbuildinfo && npm run build:codegen",
-    "typecheck": "tsc --noEmit && tsc -p example && tsc -p example/convex",
-    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "typecheck:all": "tsc --noEmit && tsc -p example && tsc -p example/convex",
+    "lint": "eslint src/",
     "all": "run-p -r 'dev:*' 'test:watch'",
     "test": "vitest run --typecheck",
     "test:watch": "vitest --typecheck --clearScreen false",

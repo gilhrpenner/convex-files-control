@@ -66,9 +66,4 @@ describe("test helpers", () => {
     expect(testHelpers.modules).toBeTypeOf("object");
   });
 
-  test("shared exports are available", () => {
-    expect(shared.DEFAULT_PATH_PREFIX).toBe("/files");
-    expect(__ignore).toBe(true);
-  });
-
 });

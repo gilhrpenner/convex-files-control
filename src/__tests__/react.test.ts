@@ -214,6 +214,9 @@ describe("useUploadFile", () => {
       // Note: accessKeys is NOT in form - it's added server-side via checkUploadRequest hook
       expect(form.get(uploadFormFields.provider)).toBe("convex");
       expect(form.get(uploadFormFields.expiresAt)).toBe("null");
+      expect(init?.headers).toEqual({
+        Authorization: "Bearer token",
+      });
       return new Response(JSON.stringify(responsePayload), { status: 200 });
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -221,7 +224,11 @@ describe("useUploadFile", () => {
     const result = await uploadViaHttpAction({
       file: new File(["data"], "file.txt"),
       expiresAt: null,
-      http: { baseUrl: "https://example.com", pathPrefix: "/files" },
+      http: {
+        baseUrl: "https://example.com",
+        pathPrefix: "/files",
+        authToken: "token",
+      },
     });
 
     expect(fetchMock).toHaveBeenCalledWith(

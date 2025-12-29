@@ -198,6 +198,48 @@ describe("transferFile", () => {
     expect(ctx.runMutation).toHaveBeenCalled();
   });
 
+  test("transferFile uses r2 download url for r2 sources", async () => {
+    const getUrl = vi.fn();
+    const ctx = {
+      runQuery: vi.fn(async () => ({
+        _id: "file",
+        storageId: "storage",
+        storageProvider: "r2",
+      })),
+      runMutation: vi.fn(async () => ({
+        storageId: "new-storage",
+        storageProvider: "convex",
+      })),
+      storage: {
+        getUrl,
+        store: vi.fn(async () => "new-storage"),
+      },
+    } as any;
+
+    const downloadSpy = vi
+      .spyOn(r2, "getR2DownloadUrl")
+      .mockResolvedValue("https://r2-download.example.com");
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response("data", {
+          status: 200,
+          headers: { "Content-Type": "text/plain" },
+        }),
+      ),
+    );
+
+    await getHandler(transferFile)(ctx, {
+      storageId: "storage",
+      targetProvider: "convex",
+      r2Config,
+    });
+
+    expect(downloadSpy).toHaveBeenCalledWith(r2Config, "storage");
+    expect(getUrl).not.toHaveBeenCalled();
+  });
+
   test("transfers convex source to r2 target", async () => {
     const send = vi.fn(async () => ({}));
     vi.spyOn(r2, "createR2Client").mockReturnValue({ send } as any);
@@ -239,6 +281,26 @@ describe("transferFile", () => {
     expect(result.storageProvider).toBe("r2");
     expect(send).toHaveBeenCalled();
     expect(send.mock.calls[0]?.[0]).toBeInstanceOf(PutObjectCommand);
+  });
+
+  test("throws when source provider is unrecognized", async () => {
+    const ctx = {
+      runQuery: vi.fn(async () => ({
+        _id: "file",
+        storageId: "storage",
+        storageProvider: "unknown",
+      })),
+      storage: {
+        getUrl: vi.fn(),
+      },
+    } as any;
+
+    await expect(
+      getHandler(transferFile)(ctx, {
+        storageId: "storage",
+        targetProvider: "convex",
+      }),
+    ).rejects.toThrow("File not found.");
   });
 
   test("transfers with needsR2 false uses undefined r2Config", async () => {
@@ -370,6 +432,47 @@ describe("commitTransfer", () => {
 
     expect(result.storageId).toBe("new");
     expect(ctx.storage.delete).toHaveBeenCalled();
+  });
+
+  test("commitTransfer invokes index callbacks for access and grants", async () => {
+    const file = {
+      _id: "file",
+      storageId: "storage",
+      storageProvider: "convex",
+    };
+    const queryObj = {
+      eq: vi.fn(() => queryObj),
+    };
+
+    const ctx = {
+      db: {
+        query: (table: string) => ({
+          withIndex: (_index: string, cb?: (q: typeof queryObj) => void) => {
+            if (cb) {
+              cb(queryObj);
+            }
+            return {
+              first: async () => (table === "files" ? file : null),
+              collect: async () => [],
+            };
+          },
+        }),
+        patch: vi.fn(async () => undefined),
+      },
+      storage: {
+        delete: vi.fn(async () => undefined),
+      },
+    } as any;
+
+    await getHandler(commitTransfer)(ctx, {
+      storageId: "storage",
+      newStorageId: "new",
+      targetProvider: "convex",
+      sourceProvider: "convex",
+    });
+
+    expect(queryObj.eq).toHaveBeenCalledWith("fileId", "file");
+    expect(queryObj.eq).toHaveBeenCalledWith("storageId", "storage");
   });
 
   test("updates records and deletes r2 storage", async () => {

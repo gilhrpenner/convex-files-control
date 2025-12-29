@@ -1,90 +1,111 @@
 # Convex Files Control
 
-A robust, secure file management component for Convex, featuring access control,
-temporary download links, and automatic cleanup.
+A Convex component for secure file uploads, access control, download grants, and
+lifecycle cleanup. Works with Convex storage and Cloudflare R2, and ships with
+an optional HTTP upload/download router plus a React upload hook.
 
 ## Features
 
-- **Secure Uploads**: Support for both presigned URLs (client-side) and HTTP
-  actions (server-side).
-- **Access Control**: Granular file access using "Access Keys" (e.g., User IDs,
-  Tenant IDs).
-- **Secure Downloads**: Generate temporary, single-use, or limited-use download
-  links.
-- **Expiration & Cleanup**: Built-in support for file expiration and automatic
-  background cleanup.
-- **Metadata**: Computes and returns SHA-256 checksums, size, and MIME type.
+- Two-step uploads (presigned URL) with access keys and optional expiration.
+- Optional HTTP upload/download routes with auth hooks.
+- Download grants with max uses, expiration, optional password, and shareable links.
+- Access-key based authorization (user IDs, tenant IDs, etc.).
+- Built-in cleanup for expired uploads, grants, and files.
+- Transfer files between Convex and R2.
+- React hook for presigned or HTTP uploads.
 
-## Installation
+## Install
 
 ```bash
 npm install @gilhrpenner/convex-files-control
 ```
 
-## Setup
+## Quick start
 
-### 1. Configure Component
+### 1) Add the component
 
-Add the component to your `convex.config.ts`:
-
-```typescript
+```ts
 // convex.config.ts
 import { defineApp } from "convex/server";
-import filesControl from "@gilhrpenner/convex-files-control/convex.config";
+import convexFilesControl from "@gilhrpenner/convex-files-control/convex.config";
 
 const app = defineApp();
-app.use(filesControl);
+app.use(convexFilesControl);
 
 export default app;
 ```
 
-### 2. Expose the API
+### 2) Create wrapper functions in your app
 
-Create a file (e.g., `convex/files.ts`) with server-side wrappers that call into
-the component. Only export the functions you actually want callable from the client.
+The component stores access control and download grants. Your app should store
+its own file metadata (name, owner, etc.) and enforce auth. The wrappers below
+mirror the example app in `example/convex/files.ts`.
 
-```typescript
+```ts
 // convex/files.ts
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { mutation } from "./_generated/server";
 import { components } from "./_generated/api";
 
-// Expose only the client-facing download operation (with your auth rules)
-export const createDownloadGrant = mutation({
+export const generateUploadUrl = mutation({
   args: {
-    storageId: v.id("_storage"),
-    maxUses: v.optional(v.union(v.null(), v.number())),
-    expiresAt: v.optional(v.union(v.null(), v.number())),
+    provider: v.union(v.literal("convex"), v.literal("r2")),
   },
   handler: async (ctx, args) => {
-    // Example auth: const identity = await ctx.auth.getUserIdentity();
-    // if (!identity) throw new Error("Unauthorized");
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new ConvexError("Unauthorized");
+
     return await ctx.runMutation(
-      components.convexFilesControl.download.createDownloadGrant,
-      args,
+      components.convexFilesControl.upload.generateUploadUrl,
+      {
+        provider: args.provider,
+        // r2Config: { accountId, accessKeyId, secretAccessKey, bucketName },
+      },
     );
   },
 });
 
-// Wrap other component functions in server-side mutations/actions as needed.
-// For example, upload support via presigned URLs:
-export const generateUploadUrl = mutation({
-  args: {},
-  handler: async (ctx) => {
-    return await ctx.runMutation(
-      components.convexFilesControl.upload.generateUploadUrl,
-      {},
+export const finalizeUpload = mutation({
+  args: {
+    uploadToken: v.string(),
+    storageId: v.string(),
+    fileName: v.string(),
+    expiresAt: v.optional(v.union(v.null(), v.number())),
+    metadata: v.optional(
+      v.object({
+        size: v.number(),
+        sha256: v.string(),
+        contentType: v.union(v.string(), v.null()),
+      }),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new ConvexError("Unauthorized");
+
+    const { fileName, ...componentArgs } = args;
+    const result = await ctx.runMutation(
+      components.convexFilesControl.upload.finalizeUpload,
+      {
+        ...componentArgs,
+        accessKeys: [identity.subject],
+      },
     );
+
+    // Store your own file record (name, owner, etc.) here.
+    // await ctx.db.insert("files", { ... });
+
+    return result;
   },
 });
 ```
 
-### 3. Setup HTTP Routes (Optional)
+### 3) Optional HTTP routes
 
-If you want to support direct HTTP uploads or downloads (proxied through
-Convex), register the routes in `convex/http.ts`.
+If you want `/files/upload` and `/files/download`, register the router in
+`convex/http.ts`. Access keys are provided by your hook (not via the form).
 
-```typescript
+```ts
 // convex/http.ts
 import { httpRouter } from "convex/server";
 import { registerRoutes } from "@gilhrpenner/convex-files-control";
@@ -93,70 +114,78 @@ import { components } from "./_generated/api";
 const http = httpRouter();
 
 registerRoutes(http, components.convexFilesControl, {
-  pathPrefix: "/files", // Routes will be /files/download (upload is opt-in)
-  requireAccessKey: false, // Set to true to require accessKey from checkDownloadRequest
-  enableUploadRoute: true, // Opt-in to /files/upload
+  pathPrefix: "files",
+  enableUploadRoute: true,
+
+  // Required when enableUploadRoute is true
+  checkUploadRequest: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    return { accessKeys: [identity.subject] };
+  },
+
+  // Optional: persist file metadata after a successful HTTP upload
+  onUploadComplete: async (ctx, { result, file }) => {
+    const fileName = (file as File).name ?? "untitled";
+    // await ctx.runMutation(api.files.recordUpload, { ...result, fileName });
+  },
+
+  // Optional: provide accessKey for downloads
+  checkDownloadRequest: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (identity) return { accessKey: identity.subject };
+  },
 });
 
 export default http;
 ```
 
-## Usage
+HTTP upload requires `multipart/form-data` with fields:
+- `file` (required)
+- `provider` (optional, "convex" | "r2")
+- `expiresAt` (optional, timestamp or `null`)
 
-### Uploading Files
+Access keys are not accepted via the form; they must come from
+`checkUploadRequest`.
 
-#### Option A: Presigned URL (Recommended)
+Useful route options:
+- `pathPrefix` (default: `/files`)
+- `defaultUploadProvider` (`\"convex\"` or `\"r2\"`)
+- `enableDownloadRoute` (default: `true`)
+- `requireAccessKey` (force `checkDownloadRequest` to return an access key)
+- `passwordHeader` / `passwordQueryParam` (override or disable password inputs)
 
-This is the most efficient method, uploading directly from the client to Convex
-storage.
+## Uploading files
 
-1.  **Generate Upload URL**: Call your exposed `generateUploadUrl` mutation.
-2.  **Upload File**: POST the file to the returned `uploadUrl`.
-3.  **Finalize**: Call `finalizeUpload` with the `uploadToken` and `storageId`.
+### Presigned URL flow
 
-```typescript
-// Client-side example
-const { uploadUrl, uploadToken } = await generateUploadUrl();
+```ts
+// Client-side
+const { uploadUrl, uploadToken } = await generateUploadUrl({ provider: "convex" });
 
-const result = await fetch(uploadUrl, {
+const uploadResponse = await fetch(uploadUrl, {
   method: "POST",
-  body: fileBlob, // your file object
-  headers: { "Content-Type": fileBlob.type },
+  body: file,
+  headers: { "Content-Type": file.type || "application/octet-stream" },
 });
-const { storageId } = await result.json();
 
-const fileParams = {
+const { storageId } = await uploadResponse.json();
+
+const result = await finalizeUpload({
   uploadToken,
   storageId,
-  accessKeys: ["user_123"], // Who can access this file?
-  expiresAt: Date.now() + 24 * 60 * 60 * 1000, // Optional expiration
-};
-
-const metadata = await finalizeUpload(fileParams);
-console.log("File uploaded:", metadata);
-```
-
-#### Option B: HTTP Action
-
-Upload directly via your configured HTTP endpoint.
-
-```typescript
-const formData = new FormData();
-formData.append("file", fileBlob);
-formData.append("accessKeys", JSON.stringify(["user_123"]));
-// Optional: formData.append("expiresAt", timestamp);
-
-await fetch("https://<your-convex-site>/files/upload", {
-  method: "POST",
-  body: formData,
+  fileName: file.name,
+  expiresAt: Date.now() + 60 * 60 * 1000,
 });
 ```
 
-### React Hook (Optional)
-
-If you're using React, the component exports a `useUploadFile` hook that supports
-both upload methods with a single API. The HTTP method requires `registerRoutes`
-to be set up in `convex/http.ts`.
+### React hook
 
 ```tsx
 import { useUploadFile } from "@gilhrpenner/convex-files-control/react";
@@ -165,166 +194,171 @@ import { api } from "../convex/_generated/api";
 const convexSiteUrl = import.meta.env.VITE_CONVEX_URL.replace(".cloud", ".site");
 
 const { uploadFile } = useUploadFile(api.files, {
+  method: "presigned",
   http: { baseUrl: convexSiteUrl },
 });
 
-// Presigned URL upload
-await uploadFile({
-  file,
-  accessKeys: ["user_123"],
-  expiresAt: Date.now() + 60 * 60 * 1000,
-  method: "presigned",
-});
+// Presigned
+await uploadFile({ file, provider: "convex" });
 
-// HTTP action upload
+// HTTP route
 await uploadFile({
   file,
-  accessKeys: ["user_123"],
   method: "http",
+  provider: "convex",
+  http: {
+    baseUrl: convexSiteUrl,
+    // authToken: useAuthToken() from @convex-dev/auth/react
+  },
 });
 ```
 
-The hook returns the same metadata you get from `finalizeUpload`/HTTP upload, so
-you can persist it in your own tables if needed.
+`uploadFile` accepts:
+- `file` (required)
+- `provider` ("convex" | "r2")
+- `expiresAt` (timestamp or `null`)
+- `method` ("presigned" | "http")
 
-### Downloading Files
+## Downloading files
 
-To download a file securely, you create a "Download Grant". This generates a
-token that can be exchanged for the file content.
+### Create a grant + build a URL
 
-1.  **Create Grant**: Call `createDownloadGrant` with the `storageId`.
-2.  **Build URL**: Use the helper to construct the download link.
-
-```typescript
+```ts
 import { buildDownloadUrl } from "@gilhrpenner/convex-files-control";
 
-// Server-side (Mutation)
-export const generateLink = mutation({
-  args: { storageId: v.id("_storage") },
-  handler: async (ctx, args) => {
-    // 1. Create a grant (e.g., valid for 1 use)
-    const grant = await ctx.runMutation(api.files.createDownloadGrant, {
-      storageId: args.storageId,
-      maxUses: 1, // Optional: limit uses
-      expiresAt: Date.now() + 60 * 1000, // Optional: limit time
-    });
-
-    // 2. Build the URL
-    // You'll need your Convex HTTP site URL e.g. from process.env.CONVEX_SITE_URL
-    return buildDownloadUrl({
-      baseUrl: "https://<your-convex-site>",
-      downloadToken: grant.downloadToken,
-      filename: "report.pdf", // Optional: force filename
-    });
+const grant = await ctx.runMutation(
+  components.convexFilesControl.download.createDownloadGrant,
+  {
+    storageId,
+    maxUses: 1,
+    expiresAt: Date.now() + 10 * 60 * 1000,
+    shareableLink: false,
   },
+);
+
+const url = buildDownloadUrl({
+  baseUrl: "https://<your-convex-site>",
+  downloadToken: grant.downloadToken,
+  filename: "report.pdf",
+  // pathPrefix: "/files", // Optional if you changed the HTTP route prefix
 });
 ```
 
-If you require access keys for downloads, supply them via `checkDownloadRequest`
-and enable `requireAccessKey` on `registerRoutes` (they are not embedded in the URL).
+Access keys are not placed in the URL. For private grants, supply them via
+`checkDownloadRequest` (HTTP route) or pass `accessKey` when calling
+`consumeDownloadGrantForUrl`.
 
-The user then visits this URL. The component validates the grant and redirects
-to the secure storage URL.
+### Shareable links
 
-#### Password-Protected Download Grants
+Set `shareableLink: true` to allow unauthenticated downloads (no access key
+required). This is how the example app generates public links.
+If you enable `requireAccessKey` on the HTTP route, shareable links will still
+require `checkDownloadRequest` to return an access key.
 
-You can optionally protect a grant with a password. The component hashes the
-password using PBKDF2-SHA256 with a per-grant salt and only stores the hash.
+### Password-protected grants
 
-```typescript
-// Server-side (Mutation)
-export const generatePasswordLink = mutation({
-  args: { storageId: v.id("_storage") },
-  handler: async (ctx, args) => {
-    const grant = await ctx.runMutation(api.files.createDownloadGrant, {
-      storageId: args.storageId,
-      password: "secret-passphrase",
-    });
-
-    return buildDownloadUrl({
-      baseUrl: "https://<your-convex-site>",
-      downloadToken: grant.downloadToken,
-      filename: "report.pdf",
-    });
-  },
-});
-```
-
-To consume a password-protected grant, pass the password to
-`consumeDownloadGrantForUrl`:
-
-```typescript
-const result = await ctx.runMutation(
-  components.convexFilesControl.download.consumeDownloadGrantForUrl,
-  { downloadToken, accessKey, password: "secret-passphrase" },
+```ts
+const grant = await ctx.runMutation(
+  components.convexFilesControl.download.createDownloadGrant,
+  { storageId, password: "secret-passphrase" },
 );
 ```
 
-If you use the HTTP GET download route, you can send the password via the
-`x-download-password` header (preferred) or a `password` query param. Note that
-query params can appear in logs and caches, so headers or POST flows are safer.
+To consume a password-protected grant, pass `password` to
+`consumeDownloadGrantForUrl`, or send it to the HTTP route via the
+`x-download-password` header (preferred) or the `password` query param. Query
+params can leak into logs, so headers or POST flows are safer.
 
-#### Rate Limiting Downloads
+## Access control & queries
 
-If you want to rate limit downloads, use the `checkDownloadRequest` hook when
-registering routes and call your preferred rate limiter there.
+Access keys are normalized (trimmed) and must contain at least one non-empty
+value.
 
-```typescript
-registerRoutes(http, components.convexFilesControl, {
-  checkDownloadRequest: async (_ctx, { request }) => {
-    const ip =
-      request.headers.get("x-forwarded-for") ??
-      request.headers.get("cf-connecting-ip") ??
-      "unknown";
+- `accessControl.addAccessKey(storageId, accessKey)`
+- `accessControl.removeAccessKey(storageId, accessKey)`
+- `accessControl.updateFileExpiration(storageId, expiresAt)`
+- `queries.hasAccessKey(storageId, accessKey)`
+- `queries.listAccessKeysPage(storageId, paginationOpts)`
+- `queries.listFilesPage(paginationOpts)`
+- `queries.listFilesByAccessKeyPage(accessKey, paginationOpts)`
+- `queries.listDownloadGrantsPage(paginationOpts)`
+- `queries.getFile({ storageId })`
 
-    // Call your rate limiter here. Return a Response to short-circuit.
-    if (ip === "blocked") {
-      return new Response(JSON.stringify({ error: "Too many requests" }), {
-        status: 429,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-  },
-});
-```
+Pagination uses `{ numItems: number, cursor: string | null }`.
 
-### Managing Files
+## Cleanup
 
-#### Access Control
+Use `cleanUp.cleanupExpired` to delete expired uploads, grants, and files. The
+example app wraps this in a mutation and runs it in a cron job.
 
-Files are protected by "Access Keys". A user can only access a file if they have
-a matching key (e.g., their User ID).
-
-- `addAccessKey(storageId, accessKey)`
-- `removeAccessKey(storageId, accessKey)`
-- `hasAccessKey(storageId, accessKey)`
-- `listAccessKeysPage(storageId, paginationOpts)`
-
-#### File Listings (Paginated)
-
-- `listFilesPage(paginationOpts)`: List files using cursor-based pagination.
-- `listFilesByAccessKeyPage(accessKey, paginationOpts)`: List files for a specific user.
-
-`paginationOpts` is the standard Convex pagination object:
-`{ numItems: number, cursor: string | null }`.
-
-#### Cleanup
-
-The component includes a `cleanupExpired` mutation. It is recommended to
-schedule this to run periodically (e.g., via Convex Crons) to remove expired
-files and unused grants.
-
-```typescript
+```ts
 // convex/crons.ts
 import { cronJobs } from "convex/server";
-import { api } from "./_generated/api";
+import { internal } from "./_generated/api";
 
 const crons = cronJobs();
-
-// Run cleanup every hour
-crons.hourly("cleanup-files", { minutes: 0 }, api.files.cleanupExpired, {
-  limit: 100,
-});
-
+crons.hourly("cleanup-expired-files", { minuteUTC: 0 }, internal.files.cleanupExpiredFiles, {});
 export default crons;
 ```
+
+## Server-side helper (FilesControl)
+
+If you prefer a class wrapper around component calls, use `FilesControl`:
+
+```ts
+import { FilesControl } from "@gilhrpenner/convex-files-control";
+import { components } from "./_generated/api";
+
+const files = new FilesControl(components.convexFilesControl, {
+  // r2: { accountId, accessKeyId, secretAccessKey, bucketName },
+});
+
+await files.generateUploadUrl(ctx, { provider: "convex" });
+```
+
+`FilesControl.clientApi()` also returns a ready-to-export API surface with
+optional hooks if you want the component to generate your Convex mutations and
+queries for you.
+
+## R2 configuration
+
+Provide R2 credentials when you use R2 for uploads, downloads, deletes, or
+transfers. You can pass `r2Config` to the component calls or supply env vars
+for the HTTP routes:
+
+- `R2_ACCOUNT_ID`
+- `R2_ACCESS_KEY_ID`
+- `R2_SECRET_ACCESS_KEY`
+- `R2_BUCKET_NAME`
+
+## Transfer between providers
+
+```ts
+const result = await ctx.runAction(
+  components.convexFilesControl.transfer.transferFile,
+  { storageId, targetProvider: "r2", r2Config },
+);
+```
+
+The transfer preserves access keys and download grants, updates the file record,
+and deletes the original storage object.
+
+## Testing helper
+
+```ts
+import { convexTest } from "convex-test";
+import { register } from "@gilhrpenner/convex-files-control/test";
+
+const t = convexTest(schema, modules);
+register(t, "convexFilesControl");
+```
+
+## Example app
+
+A full Convex + React + Convex Auth implementation lives in `example/`.
+It demonstrates:
+- presigned and HTTP uploads
+- authenticated downloads and shareable links
+- access key management
+- transfer between Convex and R2
+- scheduled cleanup

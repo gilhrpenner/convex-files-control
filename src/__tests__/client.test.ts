@@ -155,6 +155,35 @@ describe("registerRoutes", () => {
     );
   });
 
+  test("download route uses accessKey from checkDownloadRequest hook", async () => {
+    const router = createRouter();
+    const checkDownloadRequest = vi.fn(async () => ({ accessKey: "from-hook" }));
+    registerRoutes(router, component, { checkDownloadRequest });
+    const downloadRoute = getRoute(router, "/files/download", "GET");
+    const handler = getHandler(downloadRoute.handler);
+
+    const runMutation = vi.fn(async () => ({
+      status: "ok",
+      downloadUrl: "https://file.example.com",
+    }));
+    const ctx = makeCtx(runMutation);
+
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("file", { status: 200 })));
+
+    await handler(
+      ctx,
+      buildDownloadRequest("https://example.com/files/download?token=token"),
+    );
+
+    expect(runMutation).toHaveBeenCalledWith(
+      component.download.consumeDownloadGrantForUrl,
+      expect.objectContaining({
+        downloadToken: "token",
+        accessKey: "from-hook",
+      }),
+    );
+  });
+
   test("download route forwards password from query or header", async () => {
     const router = createRouter();
     registerRoutes(router, component, { passwordHeader: "x-download-password" });
@@ -352,6 +381,347 @@ describe("registerRoutes", () => {
     );
   });
 
+  test("upload route uses btoa fallback when Buffer is unavailable", async () => {
+    const checkUploadRequest = mockCheckUploadRequest(["a"]);
+    const router = createRouter();
+    registerRoutes(router, component, { enableUploadRoute: true, checkUploadRequest });
+    const uploadRoute = getRoute(router, "/files/upload", "POST");
+    const handler = getHandler(uploadRoute.handler);
+
+    const uploadUrl = "https://upload.example.com";
+    const runMutation = vi.fn(async (ref) => {
+      if (ref === component.upload.generateUploadUrl) {
+        return {
+          uploadUrl,
+          uploadToken: "token",
+          uploadTokenExpiresAt: Date.now(),
+          storageProvider: "convex",
+          storageId: null,
+        };
+      }
+      if (ref === component.upload.finalizeUpload) {
+        return {
+          storageId: "storage",
+          storageProvider: "convex",
+          expiresAt: null,
+          metadata: null,
+        };
+      }
+      throw new Error("Unexpected mutation");
+    });
+    const ctx = makeCtx(runMutation);
+
+    vi.stubGlobal("Buffer", undefined as any);
+    const btoaSpy = vi.fn((value: string) => `encoded:${value.length}`);
+    vi.stubGlobal("btoa", btoaSpy);
+    class FakeResponse {
+      body: unknown;
+      status: number;
+      statusText: string;
+      headers: Headers;
+      ok: boolean;
+
+      constructor(body: unknown, init?: ResponseInit) {
+        this.body = body;
+        this.status = init?.status ?? 200;
+        this.statusText = init?.statusText ?? "";
+        this.headers = new Headers(init?.headers);
+        this.ok = this.status >= 200 && this.status < 300;
+      }
+
+      async json() {
+        return this.body ? JSON.parse(String(this.body)) : null;
+      }
+    }
+    vi.stubGlobal("Response", FakeResponse as any);
+    class FakeTextDecoder {
+      decode() {
+        throw new Error("latin1 unsupported");
+      }
+    }
+    vi.stubGlobal("TextDecoder", FakeTextDecoder as any);
+    vi.stubGlobal("crypto", {
+      subtle: {
+        digest: vi.fn(async () => new Uint8Array([1, 2, 3]).buffer),
+      },
+    });
+    expect(typeof Buffer).toBe("undefined");
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url) => {
+        if (url === uploadUrl) {
+          return {
+            ok: true,
+            json: async () => ({ storageId: "storage" }),
+          } as Response;
+        }
+        return { ok: false, status: 404 } as Response;
+      }),
+    );
+
+    const request = buildUploadRequest({
+      [uploadFormFields.file]: new File(["file"], "filename", {
+        type: "text/plain",
+      }),
+    });
+
+    const response = await handler(ctx, request);
+    expect(response.status).toBe(200);
+    expect(btoaSpy).toHaveBeenCalled();
+  });
+
+  test("upload route skips TextDecoder when unavailable", async () => {
+    const checkUploadRequest = mockCheckUploadRequest(["a"]);
+    const router = createRouter();
+    registerRoutes(router, component, { enableUploadRoute: true, checkUploadRequest });
+    const uploadRoute = getRoute(router, "/files/upload", "POST");
+    const handler = getHandler(uploadRoute.handler);
+
+    const uploadUrl = "https://upload.example.com";
+    const runMutation = vi.fn(async (ref) => {
+      if (ref === component.upload.generateUploadUrl) {
+        return {
+          uploadUrl,
+          uploadToken: "token",
+          uploadTokenExpiresAt: Date.now(),
+          storageProvider: "convex",
+          storageId: null,
+        };
+      }
+      if (ref === component.upload.finalizeUpload) {
+        return {
+          storageId: "storage",
+          storageProvider: "convex",
+          expiresAt: null,
+          metadata: null,
+        };
+      }
+      throw new Error("Unexpected mutation");
+    });
+    const ctx = makeCtx(runMutation);
+
+    vi.stubGlobal("Buffer", undefined as any);
+    const btoaSpy = vi.fn(() => "encoded");
+    vi.stubGlobal("btoa", btoaSpy);
+    vi.stubGlobal("TextDecoder", undefined as any);
+    class FakeResponse {
+      body: unknown;
+      status: number;
+      statusText: string;
+      headers: Headers;
+      ok: boolean;
+
+      constructor(body: unknown, init?: ResponseInit) {
+        this.body = body;
+        this.status = init?.status ?? 200;
+        this.statusText = init?.statusText ?? "";
+        this.headers = new Headers(init?.headers);
+        this.ok = this.status >= 200 && this.status < 300;
+      }
+
+      async json() {
+        return this.body ? JSON.parse(String(this.body)) : null;
+      }
+    }
+    vi.stubGlobal("Response", FakeResponse as any);
+    vi.stubGlobal("crypto", {
+      subtle: {
+        digest: vi.fn(async () => new Uint8Array([1, 2, 3]).buffer),
+      },
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url) => {
+        if (url === uploadUrl) {
+          return {
+            ok: true,
+            json: async () => ({ storageId: "storage" }),
+          } as Response;
+        }
+        return { ok: false, status: 404 } as Response;
+      }),
+    );
+
+    const request = buildUploadRequest({
+      [uploadFormFields.file]: new File(["file"], "filename", {
+        type: "text/plain",
+      }),
+    });
+
+    const response = await handler(ctx, request);
+    expect(response.status).toBe(200);
+    expect(btoaSpy).toHaveBeenCalled();
+  });
+
+  test("upload route uses TextDecoder when available", async () => {
+    const checkUploadRequest = mockCheckUploadRequest(["a"]);
+    const router = createRouter();
+    registerRoutes(router, component, { enableUploadRoute: true, checkUploadRequest });
+    const uploadRoute = getRoute(router, "/files/upload", "POST");
+    const handler = getHandler(uploadRoute.handler);
+
+    const uploadUrl = "https://upload.example.com";
+    const runMutation = vi.fn(async (ref) => {
+      if (ref === component.upload.generateUploadUrl) {
+        return {
+          uploadUrl,
+          uploadToken: "token",
+          uploadTokenExpiresAt: Date.now(),
+          storageProvider: "convex",
+          storageId: null,
+        };
+      }
+      if (ref === component.upload.finalizeUpload) {
+        return {
+          storageId: "storage",
+          storageProvider: "convex",
+          expiresAt: null,
+          metadata: null,
+        };
+      }
+      throw new Error("Unexpected mutation");
+    });
+    const ctx = makeCtx(runMutation);
+
+    vi.stubGlobal("Buffer", undefined as any);
+    const btoaSpy = vi.fn(() => "encoded");
+    vi.stubGlobal("btoa", btoaSpy);
+    class FakeResponse {
+      body: unknown;
+      status: number;
+      statusText: string;
+      headers: Headers;
+      ok: boolean;
+
+      constructor(body: unknown, init?: ResponseInit) {
+        this.body = body;
+        this.status = init?.status ?? 200;
+        this.statusText = init?.statusText ?? "";
+        this.headers = new Headers(init?.headers);
+        this.ok = this.status >= 200 && this.status < 300;
+      }
+
+      async json() {
+        return this.body ? JSON.parse(String(this.body)) : null;
+      }
+    }
+    vi.stubGlobal("Response", FakeResponse as any);
+    class FakeTextDecoder {
+      decode() {
+        return "decoded";
+      }
+    }
+    vi.stubGlobal("TextDecoder", FakeTextDecoder as any);
+    vi.stubGlobal("crypto", {
+      subtle: {
+        digest: vi.fn(async () => new Uint8Array([1, 2, 3]).buffer),
+      },
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url) => {
+        if (url === uploadUrl) {
+          return {
+            ok: true,
+            json: async () => ({ storageId: "storage" }),
+          } as Response;
+        }
+        return { ok: false, status: 404 } as Response;
+      }),
+    );
+
+    const request = buildUploadRequest({
+      [uploadFormFields.file]: new File(["file"], "filename", {
+        type: "text/plain",
+      }),
+    });
+
+    const response = await handler(ctx, request);
+    expect(response.status).toBe(200);
+    expect(btoaSpy).toHaveBeenCalledWith("decoded");
+  });
+
+  test("upload route throws when base64 encoding is unavailable", async () => {
+    const checkUploadRequest = mockCheckUploadRequest(["a"]);
+    const router = createRouter();
+    registerRoutes(router, component, { enableUploadRoute: true, checkUploadRequest });
+    const uploadRoute = getRoute(router, "/files/upload", "POST");
+    const handler = getHandler(uploadRoute.handler);
+
+    const uploadUrl = "https://upload.example.com";
+    const runMutation = vi.fn(async (ref) => {
+      if (ref === component.upload.generateUploadUrl) {
+        return {
+          uploadUrl,
+          uploadToken: "token",
+          uploadTokenExpiresAt: Date.now(),
+          storageProvider: "convex",
+          storageId: null,
+        };
+      }
+      if (ref === component.upload.finalizeUpload) {
+        return {
+          storageId: "storage",
+          storageProvider: "convex",
+          expiresAt: null,
+          metadata: null,
+        };
+      }
+      throw new Error("Unexpected mutation");
+    });
+    const ctx = makeCtx(runMutation);
+
+    vi.stubGlobal("Buffer", undefined as any);
+    vi.stubGlobal("btoa", undefined as any);
+    class FakeResponse {
+      body: unknown;
+      status: number;
+      statusText: string;
+      headers: Headers;
+      ok: boolean;
+
+      constructor(body: unknown, init?: ResponseInit) {
+        this.body = body;
+        this.status = init?.status ?? 200;
+        this.statusText = init?.statusText ?? "";
+        this.headers = new Headers(init?.headers);
+        this.ok = this.status >= 200 && this.status < 300;
+      }
+    }
+    vi.stubGlobal("Response", FakeResponse as any);
+    vi.stubGlobal("crypto", {
+      subtle: {
+        digest: vi.fn(async () => new Uint8Array([1, 2, 3]).buffer),
+      },
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url) => {
+        if (url === uploadUrl) {
+          return {
+            ok: true,
+            json: async () => ({ storageId: "storage" }),
+          } as Response;
+        }
+        return { ok: false, status: 404 } as Response;
+      }),
+    );
+
+    const request = buildUploadRequest({
+      [uploadFormFields.file]: new File(["file"], "filename", {
+        type: "text/plain",
+      }),
+    });
+
+    await expect(handler(ctx, request)).rejects.toThrow(
+      "Base64 encoding is not available in this environment.",
+    );
+  });
+
   test("upload route calls onUploadComplete hook", async () => {
     const checkUploadRequest = mockCheckUploadRequest(["a"]);
     const onUploadComplete = vi.fn(async () => undefined);
@@ -421,6 +791,73 @@ describe("registerRoutes", () => {
       expiresAt: null,
       result: finalizeResult,
     });
+  });
+
+  test("upload route returns hook response with CORS headers", async () => {
+    const checkUploadRequest = mockCheckUploadRequest(["a"]);
+    const onUploadComplete = vi.fn(async () =>
+      new Response("hooked", {
+        status: 202,
+        headers: { "X-Hook": "true" },
+      }),
+    );
+    const router = createRouter();
+    registerRoutes(router, component, {
+      enableUploadRoute: true,
+      checkUploadRequest,
+      onUploadComplete,
+    });
+    const uploadRoute = getRoute(router, "/files/upload", "POST");
+    const handler = getHandler(uploadRoute.handler);
+
+    const uploadUrl = "https://upload.example.com";
+    const uploadToken = "upload-token";
+    const runMutation = vi.fn(async (ref) => {
+      if (ref === component.upload.generateUploadUrl) {
+        return {
+          uploadUrl,
+          uploadToken,
+          uploadTokenExpiresAt: Date.now(),
+          storageProvider: "convex",
+          storageId: null,
+        };
+      }
+      if (ref === component.upload.finalizeUpload) {
+        return {
+          storageId: "storage",
+          storageProvider: "convex",
+          expiresAt: null,
+          metadata: null,
+        };
+      }
+      throw new Error("Unexpected mutation");
+    });
+
+    const ctx = makeCtx(runMutation);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url) => {
+        if (url === uploadUrl) {
+          return new Response(JSON.stringify({ storageId: "storage" }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        return new Response(null, { status: 404 });
+      }),
+    );
+
+    const request = buildUploadRequest({
+      [uploadFormFields.file]: new File(["file"], "filename", { type: "text/plain" }),
+    });
+    request.headers.set("Origin", "https://origin.example");
+
+    const response = await handler(ctx, request);
+    expect(response.status).toBe(202);
+    expect(response.headers.get("X-Hook")).toBe("true");
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe(
+      "https://origin.example",
+    );
   });
 
   test("upload route handles upstream failures", async () => {
@@ -512,7 +949,7 @@ describe("registerRoutes", () => {
       const response = await handler(
         ctx,
         buildDownloadRequest(
-          "https://example.com/files/download?token=token&accessKey=key",
+          "https://example.com/files/download?token=token",
         ),
       );
       expect(response.status).toBe(entry.code);
@@ -594,6 +1031,35 @@ describe("registerRoutes", () => {
       "attachment; filename=\"download\"",
     );
   });
+
+  test("download route omits Content-Type when upstream is missing it", async () => {
+    const router = createRouter();
+    registerRoutes(router, component);
+    const downloadRoute = getRoute(router, "/files/download", "GET");
+    const handler = getHandler(downloadRoute.handler);
+
+    const runMutation = vi.fn(async () => ({
+      status: "ok",
+      downloadUrl: "https://file.example.com",
+    }));
+    const ctx = makeCtx(runMutation);
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        body: "file",
+        headers: new Headers(),
+      }) as any),
+    );
+
+    const response = await handler(
+      ctx,
+      buildDownloadRequest("https://example.com/files/download?token=token"),
+    );
+
+    expect(response.status).toBe(200);
+  });
 });
 
 describe("helpers", () => {
@@ -601,11 +1067,10 @@ describe("helpers", () => {
     const url = buildDownloadUrl({
       baseUrl: "https://example.com/",
       downloadToken: "token",
-      accessKey: "key",
       filename: "file.txt",
     });
     expect(url).toBe(
-      "https://example.com/files/download?token=token&accessKey=key&filename=file.txt",
+      "https://example.com/files/download?token=token&filename=file.txt",
     );
   });
 
