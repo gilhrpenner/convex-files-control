@@ -181,3 +181,56 @@ export const deleteFile = mutation({
     );
   },
 });
+
+/**
+ * Generate a single-use download URL for a file.
+ * Creates a download grant with maxUses: 1 and immediately consumes it.
+ */
+export const getFileDownloadUrl = mutation({
+  args: {
+    _id: v.id("filesUploads"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) {
+      throw new ConvexError("User is not authenticated.");
+    }
+
+    const file = await ctx.db.get("filesUploads", args._id);
+    if (!file) {
+      throw new ConvexError("File not found.");
+    }
+    if (file.userId !== userId) {
+      throw new ConvexError("You do not have permission to download this file.");
+    }
+
+    // Create a single-use download grant
+    const grant = await ctx.runMutation(
+      components.convexFilesControl.download.createDownloadGrant,
+      {
+        storageId: file.storageId,
+        maxUses: 1,
+      },
+    );
+
+    // Consume it immediately to get the download URL
+    const r2Config = getR2ConfigFromEnv();
+    const result = await ctx.runMutation(
+      components.convexFilesControl.download.consumeDownloadGrantForUrl,
+      {
+        downloadToken: grant.downloadToken,
+        accessKey: userId,
+        r2Config: r2Config ?? undefined,
+      },
+    );
+
+    if (result.status !== "ok" || !result.downloadUrl) {
+      throw new ConvexError(`Download failed: ${result.status}`);
+    }
+
+    return {
+      downloadUrl: result.downloadUrl,
+      fileName: file.fileName,
+    };
+  },
+});

@@ -25,7 +25,7 @@ import {
   EmptyTitle,
   EmptyDescription,
 } from "@/components/ui/empty";
-import { Upload, Loader2, FileIcon, Cloud, HardDrive, Trash } from "lucide-react";
+import { Upload, Loader2, FileIcon, Cloud, HardDrive, Trash, Download } from "lucide-react";
 import { useUploadFile } from "@gilhrpenner/convex-files-control/react";
 import type { StorageProvider } from "@gilhrpenner/convex-files-control";
 import { api } from "../convex/_generated/api";
@@ -47,6 +47,7 @@ function App() {
     authToken ? {} : "skip",
   );
   const deleteFile = useMutation(api.files.deleteFile);
+  const getFileDownloadUrl = useMutation(api.files.getFileDownloadUrl);
 
   const convexSiteUrl = React.useMemo(
     () => import.meta.env.VITE_CONVEX_URL.replace(".cloud", ".site"),
@@ -95,6 +96,32 @@ function App() {
       await deleteFile({ _id: id });
     } catch (error) {
       console.error("Delete failed:", error);
+    }
+  };
+
+  const handleDownload = async (id: string) => {
+    try {
+      // @ts-expect-error - we know the id is correct string
+      const { downloadUrl, fileName } = await getFileDownloadUrl({ _id: id });
+      
+      // Fetch the file in the background
+      const response = await fetch(downloadUrl);
+      if (!response.ok) {
+        throw new Error("Failed to fetch file");
+      }
+      const blob = await response.blob();
+      
+      // Create blob URL and trigger download
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      console.error("Download failed:", error);
     }
   };
 
@@ -210,7 +237,7 @@ function App() {
                       <TableHead>Provider</TableHead>
                       <TableHead>Size</TableHead>
                       <TableHead>Expires</TableHead>
-                      <TableHead className="w-[50px]"></TableHead>
+                      <TableHead className="w-[100px]"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -242,14 +269,24 @@ function App() {
                             : "Never"}
                         </TableCell>
                         <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                            onClick={() => void handleDelete(upload._id)}
-                          >
-                            <Trash className="h-4 w-4" />
-                          </Button>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-primary"
+                              onClick={() => void handleDownload(upload._id)}
+                            >
+                              <Download className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                              onClick={() => void handleDelete(upload._id)}
+                            >
+                              <Trash className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
