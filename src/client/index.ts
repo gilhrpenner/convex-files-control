@@ -100,6 +100,17 @@ const requireR2Config = (input?: R2ConfigInput, context?: string): R2Config => {
   );
 };
 
+function bytesToBase64(bytes: Uint8Array): string {
+  if (typeof btoa === "function") {
+    let binary = "";
+    for (const byte of bytes) {
+      binary += String.fromCharCode(byte);
+    }
+    return btoa(binary);
+  }
+  return Buffer.from(bytes).toString("base64");
+}
+
 export interface RegisterRoutesOptions {
   /** Prefix for HTTP routes, defaults to "/files". */
   pathPrefix?: string;
@@ -320,11 +331,25 @@ export function registerRoutes(
           return jsonError("Upload did not return storageId", 502, origin);
         }
 
+        // Compute file metadata from the blob for HTTP action uploads.
+        // This is necessary because R2 uploads don't have metadata in Convex's
+        // system database, and even for Convex uploads we already have the blob.
+        const fileBuffer = await file.arrayBuffer();
+        const fileBytes = new Uint8Array(fileBuffer);
+        const digest = await crypto.subtle.digest("SHA-256", fileBytes);
+        const sha256 = bytesToBase64(new Uint8Array(digest));
+        const metadata = {
+          size: fileBytes.byteLength,
+          sha256,
+          contentType: file.type || null,
+        };
+
         const result = await ctx.runMutation(component.upload.finalizeUpload, {
           uploadToken,
           storageId,
           accessKeys,
           expiresAt: expiresAt ?? undefined,
+          metadata,
         });
 
         if (onUploadComplete) {

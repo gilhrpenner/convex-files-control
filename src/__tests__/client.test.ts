@@ -311,6 +311,11 @@ describe("registerRoutes", () => {
       storageId: "storage",
       accessKeys: ["a", "b"],
       expiresAt: 123,
+      metadata: {
+        size: 4,
+        sha256: expect.any(String),
+        contentType: "text/plain",
+      },
     });
 
     // Reset hook for null expiresAt test
@@ -327,6 +332,11 @@ describe("registerRoutes", () => {
       storageId: "storage",
       accessKeys: ["a"],
       expiresAt: undefined,
+      metadata: {
+        size: 4,
+        sha256: expect.any(String),
+        contentType: "text/plain",
+      },
     });
 
     const binaryRequest = buildUploadRequest({
