@@ -1,14 +1,13 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { authTables } from "@convex-dev/auth/server";
 
+// The schema is normally optional, but Convex Auth
+// requires indexes defined on `authTables`.
+// The schema provides more precise TypeScript types.
 export default defineSchema({
-  customFiles: defineTable({
-    storageId: v.string(),
-    fileName: v.string(),
-    expiresAt: v.union(v.null(), v.number()),
-    size: v.number(),
-    sha256: v.string(),
-    contentType: v.union(v.string(), v.null()),
-    accessKey: v.string(),
-  }).index("by_storageId", ["storageId"]),
+  ...authTables,
+  numbers: defineTable({
+    value: v.number(),
+  }),
 });
