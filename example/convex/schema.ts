@@ -7,7 +7,22 @@ import { authTables } from "@convex-dev/auth/server";
 // The schema provides more precise TypeScript types.
 export default defineSchema({
   ...authTables,
-  numbers: defineTable({
-    value: v.number(),
-  }),
+
+  filesUploads: defineTable({
+    storageId: v.string(),
+    storageProvider: v.union(v.literal("convex"), v.literal("r2")),
+    userId: v.id("users"),
+    expiresAt: v.union(v.null(), v.number()),
+    metadata: v.union(
+      v.object({
+        storageId: v.string(),
+        size: v.number(),
+        sha256: v.string(),
+        contentType: v.union(v.string(), v.null()),
+      }),
+      v.null(),
+    ),
+  })
+    .index("by_storageId", ["storageId"])
+    .index("by_userId", ["userId"]),
 });

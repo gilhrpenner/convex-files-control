@@ -1,8 +1,31 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
 import { components } from "./_generated/api.js";
-import { mutation } from "./_generated/server.js";
+import { mutation, query, type MutationCtx } from "./_generated/server.js";
+import type { Id } from "./_generated/dataModel.js";
 import { getR2ConfigFromEnv } from "./r2Config.js";
+
+async function insertUploadRecord(
+  ctx: MutationCtx,
+  args: { storageId: string;
+  storageProvider: "convex" | "r2";
+  expiresAt: number | null;
+  metadata: {
+    storageId: string;
+    size: number;
+    sha256: string;
+    contentType: string | null;
+  } | null;
+  userId: Id<"users"> },
+) {
+  await ctx.db.insert("filesUploads", {
+    storageId: args.storageId,
+    storageProvider: args.storageProvider,
+    userId: args.userId,
+    expiresAt: args.expiresAt,
+    metadata: args.metadata,
+  });
+}
 
 export const generateUploadUrl = mutation({
   args: {
@@ -52,7 +75,7 @@ export const finalizeUpload = mutation({
       throw new ConvexError("User is not authenticated.");
     }
 
-    return await ctx.runMutation(
+    const result = await ctx.runMutation(
       components.convexFilesControl.upload.finalizeUpload,
       {
         /**
@@ -63,5 +86,58 @@ export const finalizeUpload = mutation({
         ...args,
       },
     );
+
+    await insertUploadRecord(ctx, {
+      userId,
+      storageId: result.storageId,
+      storageProvider: result.storageProvider,
+      expiresAt: result.expiresAt,
+      metadata: result.metadata,
+    });
+
+    return result;
+  },
+});
+
+export const recordUpload = mutation({
+  args: {
+    storageId: v.string(),
+    storageProvider: v.union(v.literal("convex"), v.literal("r2")),
+    expiresAt: v.union(v.null(), v.number()),
+    metadata: v.union(
+      v.object({
+        storageId: v.string(),
+        size: v.number(),
+        sha256: v.string(),
+        contentType: v.union(v.string(), v.null()),
+      }),
+      v.null(),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) {
+      throw new ConvexError("User is not authenticated.");
+    }
+
+    await insertUploadRecord(ctx, { userId, ...args });
+  },
+});
+
+/**
+ * Query to list all files uploaded by the current authenticated user.
+ * Returns an empty array if the user is not authenticated.
+ */
+export const listUserUploads = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) {
+      return [];
+    }
+    return await ctx.db
+      .query("filesUploads")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .collect();
   },
 });

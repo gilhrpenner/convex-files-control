@@ -1,7 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { registerRoutes } from "@gilhrpenner/convex-files-control";
 import { httpRouter } from "convex/server";
-import { components } from "./_generated/api";
+import { api, components } from "./_generated/api";
 import { auth } from "./auth";
 import { getR2ConfigFromEnv } from "./r2Config";
 
@@ -91,6 +91,14 @@ registerRoutes(http, components.convexFilesControl, {
     }
 
     return { accessKeys: [userId] };
+  },
+  onUploadComplete: async (ctx, args) => {
+    await ctx.runMutation(api.files.recordUpload, {
+      storageId: args.result.storageId,
+      storageProvider: args.result.storageProvider,
+      expiresAt: args.result.expiresAt,
+      metadata: args.result.metadata,
+    });
   },
 });
 

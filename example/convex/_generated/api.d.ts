@@ -11,7 +11,6 @@
 import type * as auth from "../auth.js";
 import type * as files from "../files.js";
 import type * as http from "../http.js";
-import type * as myFunctions from "../myFunctions.js";
 import type * as r2Config from "../r2Config.js";
 import type * as users from "../users.js";
 
@@ -25,7 +24,6 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   files: typeof files;
   http: typeof http;
-  myFunctions: typeof myFunctions;
   r2Config: typeof r2Config;
   users: typeof users;
 }>;
