@@ -1,5 +1,8 @@
 import * as React from "react";
 import { StickyHeader } from "@/components/StickyHeader";
+import { TransferSection } from "@/components/TransferSection";
+import { AccessControlSection } from "@/components/AccessControlSection";
+import { AdminDashboard } from "@/components/AdminDashboard";
 import { ShareDialog } from "@/components/ShareDialog";
 import { FileDropzone, type FileItem } from "@/components/FileDropzone";
 import { ExpirationDateInput } from "@/components/ExpirationDateInput";
@@ -301,6 +304,11 @@ function App() {
             </div>
           </div>
         </div>
+
+
+        <TransferSection />
+        <AccessControlSection />
+        <AdminDashboard />
       </main>
     </div>
   );

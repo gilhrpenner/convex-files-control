@@ -22,12 +22,20 @@ import {
 import React from "react";
 
 interface ExpirationDateInputProps {
+  initialDate?: Date | null;
   onDateChange?: (date: Date | null) => void;
 }
 
-export function ExpirationDateInput({ onDateChange }: ExpirationDateInputProps) {
-  const [date, setDate] = React.useState<Date>();
-  const [time, setTime] = React.useState("12:00");
+export function ExpirationDateInput({ initialDate, onDateChange }: ExpirationDateInputProps) {
+  const [date, setDate] = React.useState<Date | undefined>(initialDate ?? undefined);
+  const [time, setTime] = React.useState(() => {
+    if (initialDate) {
+      const hours = initialDate.getHours().toString().padStart(2, '0');
+      const minutes = initialDate.getMinutes().toString().padStart(2, '0');
+      return `${hours}:${minutes}`;
+    }
+    return "12:00";
+  });
 
   const handleDateSelect = (selectedDate: Date | undefined) => {
     setDate(selectedDate);

@@ -20,9 +20,10 @@ export function StickyHeader() {
   // Track local selection for optimistic UI (overrides server state temporarily)
   const [localSelection, setLocalSelection] = useState<string | null>(null);
 
-  const handleUserSwitch = (userId: string) => {
+  const handleUserSwitch = async (userId: string) => {
     setLocalSelection(userId); // Optimistic update
-    void signIn("demo-impersonate", { userId: userId as Id<"users"> });
+    await signIn("demo-impersonate", { userId: userId as Id<"users"> });
+    window.location.reload();
   };
 
   const isLoading = users === undefined || currentUser === undefined;
@@ -42,7 +43,7 @@ export function StickyHeader() {
         ) : (
           <Select 
             value={displayValue} 
-            onValueChange={handleUserSwitch}
+            onValueChange={(v) => void handleUserSwitch(v)}
           >
             <SelectTrigger className="w-[200px] bg-white/5 border-white/10 hover:bg-white/10 font-semibold cursor-pointer">
               <SelectValue placeholder="Select User" />
