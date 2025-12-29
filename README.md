@@ -4,11 +4,14 @@ A Convex component for secure file uploads, access control, download grants, and
 lifecycle cleanup. Works with Convex storage and Cloudflare R2, and ships with
 an optional HTTP upload/download router plus a React upload hook.
 
+**[Live Demo →](https://convex-files-control-example.pages.dev)**
+
 ## Features
 
 - Two-step uploads (presigned URL) with access keys and optional expiration.
 - Optional HTTP upload/download routes with auth hooks.
-- Download grants with max uses, expiration, optional password, and shareable links.
+- Download grants with max uses, expiration, optional password, and shareable
+  links.
 - Access-key based authorization (user IDs, tenant IDs, etc.).
 - Built-in cleanup for expired uploads, grants, and files.
 - Transfer files between Convex and R2.
@@ -147,6 +150,7 @@ export default http;
 ```
 
 HTTP upload requires `multipart/form-data` with fields:
+
 - `file` (required)
 - `provider` (optional, "convex" | "r2")
 - `expiresAt` (optional, timestamp or `null`)
@@ -155,6 +159,7 @@ Access keys are not accepted via the form; they must come from
 `checkUploadRequest`.
 
 Useful route options:
+
 - `pathPrefix` (default: `/files`)
 - `defaultUploadProvider` (`\"convex\"` or `\"r2\"`)
 - `enableDownloadRoute` (default: `true`)
@@ -167,7 +172,9 @@ Useful route options:
 
 ```ts
 // Client-side
-const { uploadUrl, uploadToken } = await generateUploadUrl({ provider: "convex" });
+const { uploadUrl, uploadToken } = await generateUploadUrl({
+  provider: "convex",
+});
 
 const uploadResponse = await fetch(uploadUrl, {
   method: "POST",
@@ -191,7 +198,10 @@ const result = await finalizeUpload({
 import { useUploadFile } from "@gilhrpenner/convex-files-control/react";
 import { api } from "../convex/_generated/api";
 
-const convexSiteUrl = import.meta.env.VITE_CONVEX_URL.replace(".cloud", ".site");
+const convexSiteUrl = import.meta.env.VITE_CONVEX_URL.replace(
+  ".cloud",
+  ".site",
+);
 
 const { uploadFile } = useUploadFile(api.files, {
   method: "presigned",
@@ -214,6 +224,7 @@ await uploadFile({
 ```
 
 `uploadFile` accepts:
+
 - `file` (required)
 - `provider` ("convex" | "r2")
 - `expiresAt` (timestamp or `null`)
@@ -251,9 +262,9 @@ Access keys are not placed in the URL. For private grants, supply them via
 ### Shareable links
 
 Set `shareableLink: true` to allow unauthenticated downloads (no access key
-required). This is how the example app generates public links.
-If you enable `requireAccessKey` on the HTTP route, shareable links will still
-require `checkDownloadRequest` to return an access key.
+required). This is how the example app generates public links. If you enable
+`requireAccessKey` on the HTTP route, shareable links will still require
+`checkDownloadRequest` to return an access key.
 
 ### Password-protected grants
 
@@ -297,7 +308,12 @@ import { cronJobs } from "convex/server";
 import { internal } from "./_generated/api";
 
 const crons = cronJobs();
-crons.hourly("cleanup-expired-files", { minuteUTC: 0 }, internal.files.cleanupExpiredFiles, {});
+crons.hourly(
+  "cleanup-expired-files",
+  { minuteUTC: 0 },
+  internal.files.cleanupExpiredFiles,
+  {},
+);
 export default crons;
 ```
 
@@ -323,8 +339,8 @@ queries for you.
 ## R2 configuration
 
 Provide R2 credentials when you use R2 for uploads, downloads, deletes, or
-transfers. You can pass `r2Config` to the component calls or supply env vars
-for the HTTP routes:
+transfers. You can pass `r2Config` to the component calls or supply env vars for
+the HTTP routes:
 
 - `R2_ACCOUNT_ID`
 - `R2_ACCESS_KEY_ID`
@@ -355,8 +371,11 @@ register(t, "convexFilesControl");
 
 ## Example app
 
-A full Convex + React + Convex Auth implementation lives in `example/`.
-It demonstrates:
+**[Live Demo →](https://convex-files-control-example.pages.dev)**
+
+A full Convex + React + Convex Auth implementation lives in `example/`. It
+demonstrates:
+
 - presigned and HTTP uploads
 - authenticated downloads and shareable links
 - access key management
