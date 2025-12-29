@@ -25,6 +25,7 @@ export default defineSchema({
     expiresAt: v.optional(v.number()),
     maxUses: v.union(v.null(), v.number()),
     useCount: v.number(),
+    shareableLink: v.optional(v.boolean()),
     passwordHash: v.optional(v.string()),
     passwordSalt: v.optional(v.string()),
     passwordIterations: v.optional(v.number()),

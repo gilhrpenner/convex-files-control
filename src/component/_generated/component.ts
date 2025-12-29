@@ -131,12 +131,14 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
           expiresAt?: null | number;
           maxUses?: null | number;
           password?: string;
+          shareableLink?: boolean;
           storageId: string;
         },
         {
           downloadToken: string;
           expiresAt: null | number;
           maxUses: null | number;
+          shareableLink: boolean;
           storageId: string;
         },
         Name

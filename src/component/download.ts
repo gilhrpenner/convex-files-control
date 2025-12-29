@@ -47,12 +47,14 @@ export const createDownloadGrant = mutation({
     maxUses: v.optional(v.union(v.null(), v.number())),
     expiresAt: v.optional(v.union(v.null(), v.number())),
     password: v.optional(v.string()),
+    shareableLink: v.optional(v.boolean()),
   },
   returns: v.object({
     downloadToken: v.id("downloadGrants"),
     storageId: v.string(),
     expiresAt: v.union(v.null(), v.number()),
     maxUses: v.union(v.null(), v.number()),
+    shareableLink: v.boolean(),
   }),
   handler: async (ctx, args) => {
     const now = Date.now();
@@ -92,11 +94,13 @@ export const createDownloadGrant = mutation({
           passwordAlgorithm: passwordRecord.algorithm,
         }
       : {};
+    const shareableLink = args.shareableLink ?? false;
     const downloadToken = await ctx.db.insert("downloadGrants", {
       storageId: args.storageId,
       expiresAt: expiresAt ?? undefined,
       maxUses: maxUses ?? null,
       useCount: 0,
+      shareableLink,
       ...passwordFields,
     });
 
@@ -105,6 +109,7 @@ export const createDownloadGrant = mutation({
       storageId: args.storageId,
       expiresAt,
       maxUses: maxUses ?? null,
+      shareableLink,
     };
   },
 });
@@ -212,30 +217,46 @@ async function consumeDownloadGrantCore(
   const filePromise = findFileByStorageId(ctx, grant.storageId);
   const accessKey = normalizeAccessKey(args.accessKey);
 
-  if (!accessKey) {
+  // Shareable links bypass access key validation
+  if (grant.shareableLink) {
     const file = await filePromise;
     if (!file) {
       await ctx.db.delete(grant._id);
       return { status: "file_missing" };
     }
-    return { status: "access_denied" };
+  } else {
+    // Regular grants require a valid access key
+    if (!accessKey) {
+      const file = await filePromise;
+      if (!file) {
+        await ctx.db.delete(grant._id);
+        return { status: "file_missing" };
+      }
+      return { status: "access_denied" };
+    }
+
+    const [file, hasAccess] = await Promise.all([
+      filePromise,
+      hasAccessKey(ctx, {
+        accessKey,
+        storageId: grant.storageId,
+      }),
+    ]);
+
+    if (!file) {
+      await ctx.db.delete(grant._id);
+      return { status: "file_missing" };
+    }
+
+    if (!hasAccess) {
+      return { status: "access_denied" };
+    }
   }
 
-  const [file, hasAccess] = await Promise.all([
-    filePromise,
-    hasAccessKey(ctx, {
-      accessKey,
-      storageId: grant.storageId,
-    }),
-  ]);
-
+  const file = await filePromise;
   if (!file) {
     await ctx.db.delete(grant._id);
     return { status: "file_missing" };
-  }
-
-  if (!hasAccess) {
-    return { status: "access_denied" };
   }
 
   if (grant.passwordHash) {

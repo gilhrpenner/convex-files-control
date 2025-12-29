@@ -57,6 +57,7 @@ describe("useUploadFile", () => {
       uploadToken,
       storageId: "storage",
       expiresAt: 123,
+      fileName: "file.txt",
     });
     expect(fetchMock).toHaveBeenCalledWith(
       uploadUrl,
