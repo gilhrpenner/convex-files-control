@@ -1,5 +1,6 @@
 import * as React from "react";
 import { useQuery } from "convex/react";
+import { useAuthToken } from "@convex-dev/auth/react";
 import { api } from "../../convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,7 +13,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ChevronLeft, ChevronRight, Database, FileText, Key, Loader2 } from "lucide-react";
+import {
+  Empty,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+  EmptyDescription,
+} from "@/components/ui/empty";
+import { ChevronLeft, ChevronRight, Database, FileText, Key, Loader2, Lock } from "lucide-react";
 import { DocumentationPanel } from "./DocumentationPanel";
 
 export function AdminDashboard() {
@@ -91,15 +99,21 @@ export function AdminDashboard() {
 }
 
 function FilesTable() {
+  const authToken = useAuthToken();
   const [cursor, setCursor] = React.useState<string | null>(null);
   const [history, setHistory] = React.useState<string[]>([]);
   
-  const results = useQuery(api.files.listAllFiles, {
-    paginationOpts: {
-      numItems: 8,
-      cursor: cursor,
-    },
-  });
+  const results = useQuery(
+    api.files.listAllFiles,
+    authToken
+      ? {
+          paginationOpts: {
+            numItems: 8,
+            cursor: cursor,
+          },
+        }
+      : "skip"
+  );
 
   const handleNext = () => {
     if (results?.continueCursor) {
@@ -113,6 +127,24 @@ function FilesTable() {
     setHistory((prev) => prev.slice(0, -1));
     setCursor(prevCursor);
   };
+
+  if (!authToken) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Empty className="border-0">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <Lock className="h-6 w-6" />
+            </EmptyMedia>
+            <EmptyTitle>Sign in required</EmptyTitle>
+            <EmptyDescription>
+              Please sign in to view all files in the system.
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      </div>
+    );
+  }
 
   if (!results) {
     return <div className="flex h-64 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
@@ -181,15 +213,21 @@ function FilesTable() {
 }
 
 function GrantsTable() {
+  const authToken = useAuthToken();
   const [cursor, setCursor] = React.useState<string | null>(null);
   const [history, setHistory] = React.useState<string[]>([]);
   
-  const results = useQuery(api.files.listDownloadGrants, {
-    paginationOpts: {
-      numItems: 8,
-      cursor: cursor,
-    },
-  });
+  const results = useQuery(
+    api.files.listDownloadGrants,
+    authToken
+      ? {
+          paginationOpts: {
+            numItems: 8,
+            cursor: cursor,
+          },
+        }
+      : "skip"
+  );
 
   const handleNext = () => {
     if (results?.continueCursor) {
@@ -203,6 +241,24 @@ function GrantsTable() {
     setHistory((prev) => prev.slice(0, -1));
     setCursor(prevCursor);
   };
+
+  if (!authToken) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Empty className="border-0">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <Lock className="h-6 w-6" />
+            </EmptyMedia>
+            <EmptyTitle>Sign in required</EmptyTitle>
+            <EmptyDescription>
+              Please sign in to view download grants.
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      </div>
+    );
+  }
 
   if (!results) {
     return <div className="flex h-64 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;

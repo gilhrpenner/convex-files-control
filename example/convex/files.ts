@@ -537,6 +537,7 @@ export const listAccessKeys = query({
  * List all files in the system (admin view).
  *
  * This exposes the component's file listing capability with pagination.
+ * Returns an empty result if the user is not authenticated.
  * In a real app, you'd want to add admin authorization here.
  */
 export const listAllFiles = query({
@@ -549,7 +550,11 @@ export const listAllFiles = query({
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) {
-      throw new ConvexError("User is not authenticated.");
+      return {
+        page: [],
+        continueCursor: null,
+        isDone: true,
+      };
     }
 
     // In production, add admin role check here
@@ -568,6 +573,7 @@ export const listAllFiles = query({
  * List all download grants in the system (admin view).
  *
  * Shows all active and expired grants with their status, uses, and expiry.
+ * Returns an empty result if the user is not authenticated.
  */
 export const listDownloadGrants = query({
   args: {
@@ -579,7 +585,11 @@ export const listDownloadGrants = query({
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) {
-      throw new ConvexError("User is not authenticated.");
+      return {
+        page: [],
+        continueCursor: null,
+        isDone: true,
+      };
     }
 
     // In production, add admin role check here
