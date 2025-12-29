@@ -21,7 +21,6 @@ export type HttpUploadOptions = {
 
 export type UploadFileArgs = {
   file: File;
-  accessKeys: string[];
   expiresAt?: number | null;
   method?: UploadMethod;
   http?: HttpUploadOptions;
@@ -69,7 +68,7 @@ function resolveUploadUrl(http?: HttpUploadOptions) {
  * import { useUploadFile } from "@gilhrpenner/convex-files-control/react";
  *
  * const { uploadFile } = useUploadFile(api.filesControl, { method: "presigned" });
- * await uploadFile({ file, accessKeys: ["user_123"] });
+ * await uploadFile({ file });
  * ```
  */
 export function useUploadFile<Api extends UploadApi>(
@@ -81,7 +80,7 @@ export function useUploadFile<Api extends UploadApi>(
 
   const uploadViaPresignedUrl = useCallback(
     async (args: UploadFileArgs): Promise<UploadResult> => {
-      const { file, accessKeys, expiresAt } = args;
+      const { file, expiresAt } = args;
       const provider = args.provider ?? options.provider ?? "convex";
       const { uploadUrl, uploadToken, storageId: presetStorageId } =
         await generateUploadUrl({ provider });
@@ -112,7 +111,6 @@ export function useUploadFile<Api extends UploadApi>(
       return await finalizeUpload({
         uploadToken,
         storageId,
-        accessKeys,
         expiresAt,
       });
     },
@@ -121,7 +119,7 @@ export function useUploadFile<Api extends UploadApi>(
 
   const uploadViaHttpAction = useCallback(
     async (args: UploadFileArgs): Promise<UploadResult> => {
-      const { file, accessKeys, expiresAt } = args;
+      const { file, expiresAt } = args;
       const provider = args.provider ?? options.provider ?? "convex";
       const uploadUrl = resolveUploadUrl(args.http ?? options.http);
       if (!uploadUrl) {
@@ -132,10 +130,6 @@ export function useUploadFile<Api extends UploadApi>(
 
       const formData = new FormData();
       formData.append(uploadFormFields.file, file);
-      formData.append(
-        uploadFormFields.accessKeys,
-        JSON.stringify(accessKeys),
-      );
       formData.append(uploadFormFields.provider, provider);
       if (expiresAt !== undefined) {
         formData.append(
