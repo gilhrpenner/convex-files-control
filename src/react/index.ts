@@ -141,6 +141,7 @@ export function useUploadFile<Api extends UploadApi>(
       const uploadResponse = await fetch(uploadUrl, {
         method: "POST",
         body: formData,
+        credentials: "include",
       });
 
       let payload: unknown = null;

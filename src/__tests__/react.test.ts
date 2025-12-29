@@ -48,7 +48,6 @@ describe("useUploadFile", () => {
     const file = new File(["data"], "file.txt", { type: "text/plain" });
     const result = await uploadViaPresignedUrl({
       file,
-      accessKeys: ["a"],
       expiresAt: 123,
     });
 
@@ -57,7 +56,6 @@ describe("useUploadFile", () => {
     expect(finalizeUpload).toHaveBeenCalledWith({
       uploadToken,
       storageId: "storage",
-      accessKeys: ["a"],
       expiresAt: 123,
     });
     expect(fetchMock).toHaveBeenCalledWith(
@@ -94,7 +92,6 @@ describe("useUploadFile", () => {
     const file = new File(["data"], "file.bin");
     const result = await uploadViaPresignedUrl({
       file,
-      accessKeys: ["a"],
       provider: "r2",
     });
 
@@ -129,7 +126,6 @@ describe("useUploadFile", () => {
     await expect(
       uploadViaPresignedUrl({
         file: new File(["data"], "file.txt"),
-        accessKeys: ["a"],
       }),
     ).rejects.toThrow("Upload failed: bad");
 
@@ -146,7 +142,6 @@ describe("useUploadFile", () => {
     await expect(
       uploadViaPresignedUrl({
         file: new File(["data"], "file.txt"),
-        accessKeys: ["a"],
       }),
     ).rejects.toThrow("Upload did not return a storageId.");
   });
@@ -162,14 +157,12 @@ describe("useUploadFile", () => {
     await expect(
       uploadViaHttpAction({
         file: new File(["data"], "file.txt"),
-        accessKeys: ["a"],
       }),
     ).rejects.toThrow("Missing HTTP upload URL");
 
     await expect(
       uploadViaHttpAction({
         file: new File(["data"], "file.txt"),
-        accessKeys: ["a"],
         http: {},
       }),
     ).rejects.toThrow("Missing HTTP upload URL");
@@ -182,7 +175,6 @@ describe("useUploadFile", () => {
     await expect(
       uploadViaHttpAction({
         file: new File(["data"], "file.txt"),
-        accessKeys: ["a"],
         http: { uploadUrl: "https://upload.example.com" },
       }),
     ).rejects.toThrow("Bad request");
@@ -195,7 +187,6 @@ describe("useUploadFile", () => {
     await expect(
       uploadViaHttpAction({
         file: new File(["data"], "file.txt"),
-        accessKeys: ["a"],
         http: { uploadUrl: "https://upload.example.com" },
       }),
     ).rejects.toThrow("HTTP upload failed.");
@@ -219,7 +210,7 @@ describe("useUploadFile", () => {
     const fetchMock = vi.fn(async (_url: string, init?: any) => {
       expect(init?.body).toBeInstanceOf(FormData);
       const form = init?.body as FormData;
-      expect(form.get(uploadFormFields.accessKeys)).toBe("[\"a\"]");
+      // Note: accessKeys is NOT in form - it's added server-side via checkUploadRequest hook
       expect(form.get(uploadFormFields.provider)).toBe("convex");
       expect(form.get(uploadFormFields.expiresAt)).toBe("null");
       return new Response(JSON.stringify(responsePayload), { status: 200 });
@@ -228,7 +219,6 @@ describe("useUploadFile", () => {
 
     const result = await uploadViaHttpAction({
       file: new File(["data"], "file.txt"),
-      accessKeys: ["a"],
       expiresAt: null,
       http: { baseUrl: "https://example.com", pathPrefix: "/files" },
     });
@@ -265,7 +255,6 @@ describe("useUploadFile", () => {
 
     await uploadViaHttpAction({
       file: new File(["data"], "file.txt"),
-      accessKeys: ["a"],
       expiresAt: 123,
       http: { baseUrl: "https://example.com" },
     });
@@ -310,14 +299,12 @@ describe("useUploadFile", () => {
 
     await uploadFile({
       file: new File(["data"], "file.txt"),
-      accessKeys: ["a"],
     });
 
     expect(fetchMock).toHaveBeenCalled();
 
     await uploadFile({
       file: new File(["data"], "file.txt"),
-      accessKeys: ["a"],
       method: "presigned",
     });
 
@@ -355,7 +342,6 @@ describe("useUploadFile", () => {
 
     await uploadFile({
       file: new File(["data"], "file.txt"),
-      accessKeys: ["a"],
     });
 
     expect(generateUploadUrl).toHaveBeenCalled();

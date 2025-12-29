@@ -36,7 +36,6 @@ import {
   corsResponse,
   jsonError,
   jsonSuccess,
-  parseJsonStringArray,
   parseOptionalTimestamp,
   sanitizeFilename,
   statusCodeForDownloadError,
@@ -104,10 +103,8 @@ const requireR2Config = (input?: R2ConfigInput, context?: string): R2Config => {
 export interface RegisterRoutesOptions {
   /** Prefix for HTTP routes, defaults to "/files". */
   pathPrefix?: string;
-  /** Require accessKey query param for downloads. */
+  /** Require accessKey for downloads (via checkDownloadRequest hook). */
   requireAccessKey?: boolean;
-  /** Query parameter name for accessKey. */
-  accessKeyQueryParam?: string;
   /**
    * Query parameter name for password. Note: query params can leak into logs or
    * caches; prefer headers or POST flows when possible.
@@ -122,11 +119,33 @@ export interface RegisterRoutesOptions {
   /** R2 credentials for server-side upload/download/cleanup. */
   r2?: R2ConfigInput;
   /**
+   * Required hook for upload authentication when enableUploadRoute is true.
+   * Return { accessKeys } to proceed with the upload, or a Response to reject.
+   *
+   * @example
+   * ```ts
+   * checkUploadRequest: async (ctx) => {
+   *   const userId = await getAuthUserId(ctx);
+   *   if (!userId) {
+   *     return new Response(JSON.stringify({ error: "Unauthorized" }), {
+   *       status: 401,
+   *       headers: { "Content-Type": "application/json" },
+   *     });
+   *   }
+   *   return { accessKeys: [userId] };
+   * }
+   * ```
+   */
+  checkUploadRequest?: (
+    ctx: RunHttpActionCtx,
+    args: UploadRequestArgs,
+  ) => UploadRequestResult | Promise<UploadRequestResult>;
+  /**
    * Optional hook for rate limiting or request validation. Return a Response to
    * short-circuit the request (e.g. 429).
    */
   checkDownloadRequest?: (
-    ctx: RunMutationCtx,
+    ctx: RunHttpActionCtx,
     args: DownloadRequestArgs,
   ) => void | Response | Promise<void | Response>;
 }
@@ -165,13 +184,13 @@ export function registerRoutes(
   const {
     pathPrefix = DEFAULT_PATH_PREFIX,
     requireAccessKey = false,
-    accessKeyQueryParam = "accessKey",
     passwordQueryParam = "password",
     passwordHeader = "x-download-password",
     enableUploadRoute = false,
     enableDownloadRoute = true,
     defaultUploadProvider = "convex",
     r2,
+    checkUploadRequest,
     checkDownloadRequest,
   } = options;
 
@@ -180,6 +199,13 @@ export function registerRoutes(
   const downloadPath = `${normalizedPrefix}/download`;
 
   if (enableUploadRoute) {
+    if (!checkUploadRequest) {
+      throw new Error(
+        "checkUploadRequest is required when enableUploadRoute is true. " +
+          "This hook must authenticate the request and return { accessKeys }.",
+      );
+    }
+
     http.route({
       path: uploadPath,
       method: "OPTIONS",
@@ -201,16 +227,6 @@ export function registerRoutes(
           return jsonError("Missing or invalid 'file' field", 400);
         }
 
-        const accessKeysRaw = formData.get(uploadFormFields.accessKeys);
-        if (typeof accessKeysRaw !== "string") {
-          return jsonError("Missing 'accessKeys' field", 400);
-        }
-
-        const accessKeys = parseJsonStringArray(accessKeysRaw);
-        if (!accessKeys) {
-          return jsonError("'accessKeys' must be a JSON array of strings", 400);
-        }
-
         const expiresAt = parseOptionalTimestamp(
           formData.get(uploadFormFields.expiresAt),
         );
@@ -224,6 +240,24 @@ export function registerRoutes(
         const provider = isStorageProvider(providerValue)
           ? providerValue
           : defaultUploadProvider;
+
+        // Call the auth hook to get access keys
+        const hookResult = await checkUploadRequest(ctx, {
+          file,
+          expiresAt: expiresAt ?? undefined,
+          provider,
+          request,
+        });
+
+        // If hook returns a Response, use it (e.g., 401 Unauthorized)
+        if (hookResult instanceof Response) {
+          return hookResult;
+        }
+
+        const { accessKeys } = hookResult;
+        if (!accessKeys || accessKeys.length === 0) {
+          return jsonError("checkUploadRequest must return accessKeys", 500);
+        }
 
         let r2Config: R2Config | undefined = undefined;
         if (provider === "r2") {
@@ -294,10 +328,8 @@ export function registerRoutes(
           return jsonError("Missing 'token' query parameter", 400);
         }
 
-        const accessKey = url.searchParams.get(accessKeyQueryParam) ?? undefined;
-        if (requireAccessKey && !accessKey) {
-          return jsonError("Missing required accessKey", 401);
-        }
+        // For downloads, accessKey should come from checkDownloadRequest hook
+        let accessKey: string | undefined;
 
         const passwordFromHeader = passwordHeader
           ? request.headers.get(passwordHeader)
@@ -317,6 +349,13 @@ export function registerRoutes(
           if (result instanceof Response) {
             return result;
           }
+        }
+
+        if (requireAccessKey && !accessKey) {
+          return jsonError(
+            "Missing required accessKey. Provide it via checkDownloadRequest hook.",
+            401,
+          );
         }
 
         const result = await ctx.runMutation(
@@ -456,6 +495,15 @@ type RunActionCtx = {
   runAction: GenericActionCtx<GenericDataModel>["runAction"];
 };
 
+/**
+ * Context type for HTTP action hooks. Includes auth for authentication
+ * and runMutation for calling component mutations.
+ */
+export type RunHttpActionCtx = {
+  auth: GenericActionCtx<GenericDataModel>["auth"];
+  runMutation: GenericActionCtx<GenericDataModel>["runMutation"];
+};
+
 type FinalizeUploadArgs = {
   uploadToken: Id<"pendingUploads">;
   storageId: string;
@@ -494,7 +542,18 @@ type DownloadConsumeArgs = {
   r2Config?: R2Config;
 };
 
-type DownloadRequestArgs = {
+export type UploadRequestArgs = {
+  file: Blob;
+  expiresAt?: number;
+  provider: StorageProvider;
+  request: Request;
+};
+
+export type UploadRequestResult =
+  | { accessKeys: string[] }
+  | Response;
+
+export type DownloadRequestArgs = {
   downloadToken: string;
   accessKey?: string;
   password?: string;

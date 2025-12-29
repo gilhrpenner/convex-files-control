@@ -99,9 +99,17 @@ function makeCtx(runMutation?: unknown, runQuery?: unknown) {
 }
 
 describe("registerRoutes", () => {
+  // Helper to create a mock checkUploadRequest hook that returns accessKeys
+  function mockCheckUploadRequest(accessKeys: string[] = ["test-user"]) {
+    return vi.fn(async () => ({ accessKeys }));
+  }
+
   test("registers CORS preflight routes", async () => {
     const router = createRouter();
-    registerRoutes(router, component, { enableUploadRoute: true });
+    registerRoutes(router, component, {
+      enableUploadRoute: true,
+      checkUploadRequest: mockCheckUploadRequest(),
+    });
 
     const uploadOptions = getRoute(router, "/files/upload", "OPTIONS");
     const downloadOptions = getRoute(router, "/files/download", "OPTIONS");
@@ -120,9 +128,9 @@ describe("registerRoutes", () => {
     expect(downloadResponse.status).toBe(204);
   });
 
-  test("download route uses custom access key query param", async () => {
+  test("download route handles without accessKeyQueryParam", async () => {
     const router = createRouter();
-    registerRoutes(router, component, { accessKeyQueryParam: "key" });
+    registerRoutes(router, component);
     const downloadRoute = getRoute(router, "/files/download", "GET");
     const handler = getHandler(downloadRoute.handler);
 
@@ -137,13 +145,13 @@ describe("registerRoutes", () => {
     await handler(
       ctx,
       buildDownloadRequest(
-        "https://example.com/files/download?token=token&key=custom",
+        "https://example.com/files/download?token=token",
       ),
     );
 
     expect(runMutation).toHaveBeenCalledWith(
       component.download.consumeDownloadGrantForUrl,
-      { downloadToken: "token", accessKey: "custom", password: undefined },
+      { downloadToken: "token", accessKey: undefined, password: undefined },
     );
   });
 
@@ -188,8 +196,9 @@ describe("registerRoutes", () => {
   });
 
   test("upload route validates input", async () => {
+    const checkUploadRequest = mockCheckUploadRequest(["a"]);
     const router = createRouter();
-    registerRoutes(router, component, { enableUploadRoute: true });
+    registerRoutes(router, component, { enableUploadRoute: true, checkUploadRequest });
     const uploadRoute = getRoute(router, "/files/upload", "POST");
     const handler = getHandler(uploadRoute.handler);
 
@@ -214,41 +223,12 @@ describe("registerRoutes", () => {
     );
     expect(missingContentTypeResponse.status).toBe(415);
 
-    const missingFileRequest = buildUploadRequest({
-      [uploadFormFields.accessKeys]: JSON.stringify(["a"]),
-    });
+    const missingFileRequest = buildUploadRequest({});
     const missingFileResponse = await handler(makeCtx(), missingFileRequest);
     expect(missingFileResponse.status).toBe(400);
 
-    const missingAccessKeysRequest = buildUploadRequest({
-      [uploadFormFields.file]: new File(["file"], "filename", { type: "text/plain" }),
-    });
-    const missingAccessKeysResponse = await handler(
-      makeCtx(),
-      missingAccessKeysRequest,
-    );
-    expect(missingAccessKeysResponse.status).toBe(400);
-
-    const invalidAccessKeysRequest = buildUploadRequest({
-      [uploadFormFields.file]: new File(["file"], "filename", { type: "text/plain" }),
-      [uploadFormFields.accessKeys]: "not json",
-    });
-    const invalidAccessKeysResponse = await handler(
-      makeCtx(),
-      invalidAccessKeysRequest,
-    );
-    expect(invalidAccessKeysResponse.status).toBe(400);
-
-    const invalidArrayRequest = buildUploadRequest({
-      [uploadFormFields.file]: new File(["file"], "filename", { type: "text/plain" }),
-      [uploadFormFields.accessKeys]: JSON.stringify([1]),
-    });
-    const invalidArrayResponse = await handler(makeCtx(), invalidArrayRequest);
-    expect(invalidArrayResponse.status).toBe(400);
-
     const invalidTypeRequest = buildUploadRequest({
       [uploadFormFields.file]: new File(["file"], "filename", { type: "text/plain" }),
-      [uploadFormFields.accessKeys]: JSON.stringify(["a"]),
       [uploadFormFields.expiresAt]: new File(["nope"], "filename"),
     });
     const invalidTypeResponse = await handler(makeCtx(), invalidTypeRequest);
@@ -256,7 +236,6 @@ describe("registerRoutes", () => {
 
     const invalidNumberRequest = buildUploadRequest({
       [uploadFormFields.file]: new File(["file"], "filename", { type: "text/plain" }),
-      [uploadFormFields.accessKeys]: JSON.stringify(["a"]),
       [uploadFormFields.expiresAt]: "nope",
     });
     const invalidNumberResponse = await handler(makeCtx(), invalidNumberRequest);
@@ -264,8 +243,9 @@ describe("registerRoutes", () => {
   });
 
   test("upload route handles uploads", async () => {
+    const checkUploadRequest = mockCheckUploadRequest(["a", "b"]);
     const router = createRouter();
-    registerRoutes(router, component, { enableUploadRoute: true });
+    registerRoutes(router, component, { enableUploadRoute: true, checkUploadRequest });
     const uploadRoute = getRoute(router, "/files/upload", "POST");
     const handler = getHandler(uploadRoute.handler);
 
@@ -314,7 +294,6 @@ describe("registerRoutes", () => {
 
     const request = buildUploadRequest({
       [uploadFormFields.file]: new File(["file"], "filename", { type: "text/plain" }),
-      [uploadFormFields.accessKeys]: JSON.stringify(["a", "b"]),
       [uploadFormFields.expiresAt]: "123",
     });
 
@@ -334,9 +313,11 @@ describe("registerRoutes", () => {
       expiresAt: 123,
     });
 
+    // Reset hook for null expiresAt test
+    checkUploadRequest.mockResolvedValue({ accessKeys: ["a"] });
+
     const nullRequest = buildUploadRequest({
       [uploadFormFields.file]: new File(["file"], "filename", { type: "text/plain" }),
-      [uploadFormFields.accessKeys]: JSON.stringify(["a"]),
       [uploadFormFields.expiresAt]: "null",
     });
 
@@ -350,7 +331,6 @@ describe("registerRoutes", () => {
 
     const binaryRequest = buildUploadRequest({
       [uploadFormFields.file]: new File(["file"], "filename"),
-      [uploadFormFields.accessKeys]: JSON.stringify(["a"]),
     });
 
     await handler(ctx, binaryRequest);
@@ -363,8 +343,9 @@ describe("registerRoutes", () => {
   });
 
   test("upload route handles upstream failures", async () => {
+    const checkUploadRequest = mockCheckUploadRequest(["a"]);
     const router = createRouter();
-    registerRoutes(router, component, { enableUploadRoute: true });
+    registerRoutes(router, component, { enableUploadRoute: true, checkUploadRequest });
     const uploadRoute = getRoute(router, "/files/upload", "POST");
     const handler = getHandler(uploadRoute.handler);
 
@@ -388,7 +369,6 @@ describe("registerRoutes", () => {
 
     const request = buildUploadRequest({
       [uploadFormFields.file]: new File(["file"], "filename", { type: "text/plain" }),
-      [uploadFormFields.accessKeys]: JSON.stringify(["a"]),
     });
 
     const failedUpload = await handler(ctx, request);

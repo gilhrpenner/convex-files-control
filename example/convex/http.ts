@@ -1,5 +1,6 @@
 import { httpRouter } from "convex/server";
 import { auth } from "./auth";
+import { getAuthUserId } from "@convex-dev/auth/server";
 import { registerRoutes } from "@gilhrpenner/convex-files-control";
 import { components } from "./_generated/api";
 import { getR2ConfigFromEnv } from "./r2Config";
@@ -8,12 +9,91 @@ const http = httpRouter();
 
 auth.addHttpRoutes(http);
 
-// Register HTTP routes for the file control component
+/**
+ * File Upload Routes with @gilhrpenner/convex-files-control
+ *
+ * There are two approaches to handle file uploads:
+ *
+ * ## Option 1: Use `registerRoutes` (shown below)
+ *
+ * Mount the component's HTTP routes with a `checkUploadRequest` hook for authentication.
+ * This is a quick setup that provides `/files/upload` and `/files/download` endpoints.
+ *
+ * - `pathPrefix`: The URL path prefix for routes (e.g., "files" → `/files/upload`, `/files/download`)
+ * - `checkUploadRequest`: Required hook that authenticates the request and returns `{ accessKeys }`.
+ *   Return a Response to reject the request (e.g., 401 Unauthorized).
+ * - `enableUploadRoute`: Set to true to enable the upload route.
+ * - `enableDownloadRoute`: Defaults to true. Use `checkDownloadRequest` for custom download logic.
+ *
+ * ## Option 2: Implement custom HTTP actions (see commented example below)
+ *
+ * For more control, skip `registerRoutes` and implement your own HTTP actions using
+ * the component's mutations directly via `components.convexFilesControl.upload.*`.
+ *
+ * This approach is useful when:
+ * - You need custom request parsing or validation
+ * - You want to integrate with other authentication systems
+ * - You need to add file to your own tables after upload
+ *
+ * Example custom implementation:
+ * ```ts
+ * http.route({
+ *   path: "/custom-upload",
+ *   method: "POST",
+ *   handler: httpAction(async (ctx, request) => {
+ *     const userId = await getAuthUserId(ctx);
+ *     if (!userId) return new Response("Unauthorized", { status: 401 });
+ *
+ *     // Parse your request (multipart, JSON, etc.)
+ *     const formData = await request.formData();
+ *     const file = formData.get("file") as Blob;
+ *
+ *     // Generate upload URL from component
+ *     const { uploadUrl, uploadToken } = await ctx.runMutation(
+ *       components.convexFilesControl.upload.generateUploadUrl,
+ *       { provider: "convex" }
+ *     );
+ *
+ *     // Upload file to storage
+ *     const uploadRes = await fetch(uploadUrl, { method: "POST", body: file });
+ *     const { storageId } = await uploadRes.json();
+ *
+ *     // Finalize with your accessKeys
+ *     const result = await ctx.runMutation(
+ *       components.convexFilesControl.upload.finalizeUpload,
+ *       { uploadToken, storageId, accessKeys: [userId] }
+ *     );
+ *
+ *     return new Response(JSON.stringify(result), { status: 200 });
+ *   }),
+ * });
+ * ```
+ */
 registerRoutes(http, components.convexFilesControl, {
+  // Path prefix for routes: creates /files/upload and /files/download
   pathPrefix: "files",
-  requireAccessKey: true,
+
+  // Enable the upload route (disabled by default for security)
   enableUploadRoute: true,
+
+  // R2 config is optional, only needed if using R2 storage provider
   r2: getR2ConfigFromEnv() ?? undefined,
+
+  // Required hook for upload authentication
+  // Called before every upload to authenticate and provide accessKeys
+  checkUploadRequest: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    // Return accessKeys that will be associated with the uploaded file
+    // This can be userId, tenantId, or any string identifier for access control
+    return { accessKeys: [userId] };
+  },
 });
 
 export default http;

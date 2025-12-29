@@ -105,11 +105,17 @@ function makeCtx(runMutation?: unknown, runQuery?: unknown, runAction?: unknown)
 }
 
 describe("registerRoutes extra coverage", () => {
+  // Helper to create a mock checkUploadRequest hook that returns accessKeys
+  function mockCheckUploadRequest(accessKeys: string[] = ["test-user"]) {
+    return vi.fn(async () => ({ accessKeys }));
+  }
+
   test("skips download route when disabled", () => {
     const router = createRouter();
     registerRoutes(router, component, {
       enableUploadRoute: true,
       enableDownloadRoute: false,
+      checkUploadRequest: mockCheckUploadRequest(),
     });
 
     expect(getRoute(router, "/files/download", "GET")).toBeUndefined();
@@ -187,10 +193,12 @@ describe("registerRoutes extra coverage", () => {
   });
 
   test("upload route fails when r2 config missing", async () => {
+    const checkUploadRequest = mockCheckUploadRequest(["a"]);
     const router = createRouter();
     registerRoutes(router, component, {
       enableUploadRoute: true,
       defaultUploadProvider: "r2",
+      checkUploadRequest,
     });
 
     const uploadRoute = getRoute(router, "/files/upload", "POST");
@@ -200,7 +208,6 @@ describe("registerRoutes extra coverage", () => {
       [uploadFormFields.file]: new File(["file"], "name.txt", {
         type: "text/plain",
       }),
-      [uploadFormFields.accessKeys]: JSON.stringify(["a"]),
     });
 
     const response = await handler(makeCtx(), request);
@@ -208,10 +215,12 @@ describe("registerRoutes extra coverage", () => {
   });
 
   test("upload route supports r2 provider and invalid provider defaults", async () => {
+    const checkUploadRequest = mockCheckUploadRequest(["a"]);
     const router = createRouter();
     registerRoutes(router, component, {
       enableUploadRoute: true,
       defaultUploadProvider: "convex",
+      checkUploadRequest,
       r2: {
         accountId: "acct",
         accessKeyId: "access",
@@ -259,7 +268,6 @@ describe("registerRoutes extra coverage", () => {
 
     const r2Request = buildUploadRequest({
       [uploadFormFields.file]: new File(["file"], "name.bin"),
-      [uploadFormFields.accessKeys]: JSON.stringify(["a"]),
       [uploadFormFields.provider]: "r2",
     });
 
@@ -282,7 +290,6 @@ describe("registerRoutes extra coverage", () => {
       [uploadFormFields.file]: new File(["file"], "name.txt", {
         type: "text/plain",
       }),
-      [uploadFormFields.accessKeys]: JSON.stringify(["a"]),
       [uploadFormFields.provider]: "nope",
     });
 
@@ -295,10 +302,12 @@ describe("registerRoutes extra coverage", () => {
   });
 
   test("upload route handles non-Error throws", async () => {
+    const checkUploadRequest = mockCheckUploadRequest(["a"]);
     const router = createRouter();
     registerRoutes(router, component, {
       enableUploadRoute: true,
       defaultUploadProvider: "r2",
+      checkUploadRequest,
     });
 
     const uploadRoute = getRoute(router, "/files/upload", "POST");
@@ -308,7 +317,6 @@ describe("registerRoutes extra coverage", () => {
       [uploadFormFields.file]: new File(["file"], "name.txt", {
         type: "text/plain",
       }),
-      [uploadFormFields.accessKeys]: JSON.stringify(["a"]),
     });
 
     const OriginalError = globalThis.Error;
