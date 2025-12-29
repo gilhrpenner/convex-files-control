@@ -93,9 +93,12 @@ registerRoutes(http, components.convexFilesControl, {
     return { accessKeys: [userId] };
   },
   onUploadComplete: async (ctx, args) => {
+    // Extract filename from the Blob (File objects have a name property)
+    const fileName = (args.file as File).name ?? "untitled";
     await ctx.runMutation(api.files.recordUpload, {
       storageId: args.result.storageId,
       storageProvider: args.result.storageProvider,
+      fileName,
       expiresAt: args.result.expiresAt,
       metadata: args.result.metadata,
     });

@@ -9,6 +9,7 @@ async function insertUploadRecord(
   ctx: MutationCtx,
   args: { storageId: string;
   storageProvider: "convex" | "r2";
+  fileName: string;
   expiresAt: number | null;
   metadata: {
     storageId: string;
@@ -22,6 +23,7 @@ async function insertUploadRecord(
     storageId: args.storageId,
     storageProvider: args.storageProvider,
     userId: args.userId,
+    fileName: args.fileName,
     expiresAt: args.expiresAt,
     metadata: args.metadata,
   });
@@ -60,6 +62,7 @@ export const finalizeUpload = mutation({
   args: {
     uploadToken: v.string(),
     storageId: v.string(),
+    fileName: v.string(),
     expiresAt: v.optional(v.union(v.null(), v.number())),
     metadata: v.optional(
       v.object({
@@ -75,6 +78,9 @@ export const finalizeUpload = mutation({
       throw new ConvexError("User is not authenticated.");
     }
 
+    // Extract fileName before passing to component (component doesn't accept it)
+    const { fileName, ...componentArgs } = args;
+
     const result = await ctx.runMutation(
       components.convexFilesControl.upload.finalizeUpload,
       {
@@ -83,7 +89,7 @@ export const finalizeUpload = mutation({
          * to all users of a given tenant, you can pass the them here.
          */
         accessKeys: [userId],
-        ...args,
+        ...componentArgs,
       },
     );
 
@@ -91,6 +97,7 @@ export const finalizeUpload = mutation({
       userId,
       storageId: result.storageId,
       storageProvider: result.storageProvider,
+      fileName: args.fileName,
       expiresAt: result.expiresAt,
       metadata: result.metadata,
     });
@@ -103,6 +110,7 @@ export const recordUpload = mutation({
   args: {
     storageId: v.string(),
     storageProvider: v.union(v.literal("convex"), v.literal("r2")),
+    fileName: v.string(),
     expiresAt: v.union(v.null(), v.number()),
     metadata: v.union(
       v.object({

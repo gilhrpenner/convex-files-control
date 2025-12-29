@@ -196,7 +196,7 @@ function App() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Storage ID</TableHead>
+                      <TableHead>File name</TableHead>
                       <TableHead>Provider</TableHead>
                       <TableHead>Size</TableHead>
                       <TableHead>Expires</TableHead>
@@ -205,8 +205,8 @@ function App() {
                   <TableBody>
                     {userUploads.map((upload) => (
                       <TableRow key={upload._id}>
-                        <TableCell className="font-mono text-xs">
-                          {upload.storageId.slice(0, 12)}...
+                        <TableCell className="font-medium">
+                          {upload.fileName}
                         </TableCell>
                         <TableCell>
                           <span className="inline-flex items-center gap-1.5">

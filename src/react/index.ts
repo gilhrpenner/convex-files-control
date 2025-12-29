@@ -112,6 +112,7 @@ export function useUploadFile<Api extends UploadApi>(
       return await finalizeUpload({
         uploadToken,
         storageId,
+        fileName: file.name,
         expiresAt,
       });
     },

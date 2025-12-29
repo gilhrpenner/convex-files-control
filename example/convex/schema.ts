@@ -12,6 +12,7 @@ export default defineSchema({
     storageId: v.string(),
     storageProvider: v.union(v.literal("convex"), v.literal("r2")),
     userId: v.id("users"),
+    fileName: v.string(),
     expiresAt: v.union(v.null(), v.number()),
     metadata: v.union(
       v.object({
