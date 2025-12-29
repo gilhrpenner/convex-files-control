@@ -1,24 +1,28 @@
-export function corsHeaders(): Headers {
-  return new Headers({
-    "Access-Control-Allow-Origin": "*",
+export function corsHeaders(origin?: string): Headers {
+  const headers = new Headers({
+    "Access-Control-Allow-Origin": origin || "*",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
   });
+  if (origin) {
+    headers.set("Access-Control-Allow-Credentials", "true");
+  }
+  return headers;
 }
 
-export function corsResponse(): Response {
-  return new Response(null, { status: 204, headers: corsHeaders() });
+export function corsResponse(origin?: string): Response {
+  return new Response(null, { status: 204, headers: corsHeaders(origin) });
 }
 
-export function jsonSuccess(data: unknown): Response {
-  const headers = corsHeaders();
+export function jsonSuccess(data: unknown, origin?: string): Response {
+  const headers = corsHeaders(origin);
   headers.set("Content-Type", "application/json");
 
   return new Response(JSON.stringify(data), { status: 200, headers });
 }
 
-export function jsonError(message: string, status: number): Response {
-  const headers = corsHeaders();
+export function jsonError(message: string, status: number, origin?: string): Response {
+  const headers = corsHeaders(origin);
   headers.set("Content-Type", "application/json");
 
   return new Response(JSON.stringify({ error: message }), { status, headers });

@@ -17,6 +17,7 @@ export type HttpUploadOptions = {
   uploadUrl?: string;
   baseUrl?: string;
   pathPrefix?: string;
+  authToken?: string;
 };
 
 export type UploadFileArgs = {
@@ -121,7 +122,8 @@ export function useUploadFile<Api extends UploadApi>(
     async (args: UploadFileArgs): Promise<UploadResult> => {
       const { file, expiresAt } = args;
       const provider = args.provider ?? options.provider ?? "convex";
-      const uploadUrl = resolveUploadUrl(args.http ?? options.http);
+      const httpConfig = args.http ?? options.http;
+      const uploadUrl = resolveUploadUrl(httpConfig);
       if (!uploadUrl) {
         throw new Error(
           "Missing HTTP upload URL. Provide http.uploadUrl or http.baseUrl.",
@@ -142,6 +144,9 @@ export function useUploadFile<Api extends UploadApi>(
         method: "POST",
         body: formData,
         credentials: "include",
+        headers: httpConfig?.authToken
+          ? { Authorization: `Bearer ${httpConfig.authToken}` }
+          : undefined,
       });
 
       let payload: unknown = null;

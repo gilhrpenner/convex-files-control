@@ -1,8 +1,8 @@
-import { httpRouter } from "convex/server";
-import { auth } from "./auth";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { registerRoutes } from "@gilhrpenner/convex-files-control";
+import { httpRouter } from "convex/server";
 import { components } from "./_generated/api";
+import { auth } from "./auth";
 import { getR2ConfigFromEnv } from "./r2Config";
 
 const http = httpRouter();
@@ -90,8 +90,6 @@ registerRoutes(http, components.convexFilesControl, {
       });
     }
 
-    // Return accessKeys that will be associated with the uploaded file
-    // This can be userId, tenantId, or any string identifier for access control
     return { accessKeys: [userId] };
   },
 });

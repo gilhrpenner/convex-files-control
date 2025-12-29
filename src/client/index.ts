@@ -209,29 +209,33 @@ export function registerRoutes(
     http.route({
       path: uploadPath,
       method: "OPTIONS",
-      handler: httpActionGeneric(async () => corsResponse()),
+      handler: httpActionGeneric(async (_ctx, request) => {
+        const origin = request.headers.get("Origin") ?? undefined;
+        return corsResponse(origin);
+      }),
     });
 
     http.route({
       path: uploadPath,
       method: "POST",
       handler: httpActionGeneric(async (ctx, request) => {
+        const origin = request.headers.get("Origin") ?? undefined;
         const contentType = request.headers.get("Content-Type") ?? "";
         if (!contentType.includes("multipart/form-data")) {
-          return jsonError("Content-Type must be multipart/form-data", 415);
+          return jsonError("Content-Type must be multipart/form-data", 415, origin);
         }
 
         const formData = await request.formData();
         const file = formData.get(uploadFormFields.file);
         if (!(file instanceof Blob)) {
-          return jsonError("Missing or invalid 'file' field", 400);
+          return jsonError("Missing or invalid 'file' field", 400, origin);
         }
 
         const expiresAt = parseOptionalTimestamp(
           formData.get(uploadFormFields.expiresAt),
         );
         if (expiresAt === "invalid") {
-          return jsonError("'expiresAt' must be a number or null", 400);
+          return jsonError("'expiresAt' must be a number or null", 400, origin);
         }
 
         const providerRaw = formData.get(uploadFormFields.provider);
@@ -249,14 +253,21 @@ export function registerRoutes(
           request,
         });
 
-        // If hook returns a Response, use it (e.g., 401 Unauthorized)
+        // If hook returns a Response, wrap it with CORS headers
         if (hookResult instanceof Response) {
-          return hookResult;
+          return new Response(hookResult.body, {
+            status: hookResult.status,
+            statusText: hookResult.statusText,
+            headers: {
+              ...Object.fromEntries(hookResult.headers.entries()),
+              ...Object.fromEntries(corsHeaders(origin).entries()),
+            },
+          });
         }
 
         const { accessKeys } = hookResult;
         if (!accessKeys || accessKeys.length === 0) {
-          return jsonError("checkUploadRequest must return accessKeys", 500);
+          return jsonError("checkUploadRequest must return accessKeys", 500, origin);
         }
 
         let r2Config: R2Config | undefined = undefined;
@@ -267,6 +278,7 @@ export function registerRoutes(
             return jsonError(
               error instanceof Error ? error.message : "R2 configuration missing.",
               500,
+              origin,
             );
           }
         }
@@ -284,7 +296,7 @@ export function registerRoutes(
         });
 
         if (!uploadResponse.ok) {
-          return jsonError("File upload failed", 502);
+          return jsonError("File upload failed", 502, origin);
         }
 
         let storageId = presetStorageId ?? null;
@@ -296,7 +308,7 @@ export function registerRoutes(
         }
 
         if (!storageId) {
-          return jsonError("Upload did not return storageId", 502);
+          return jsonError("Upload did not return storageId", 502, origin);
         }
 
         const result = await ctx.runMutation(component.upload.finalizeUpload, {
@@ -306,7 +318,7 @@ export function registerRoutes(
           expiresAt: expiresAt ?? undefined,
         });
 
-        return jsonSuccess(result);
+        return jsonSuccess(result, origin);
       }),
     });
   }
@@ -315,17 +327,21 @@ export function registerRoutes(
     http.route({
       path: downloadPath,
       method: "OPTIONS",
-      handler: httpActionGeneric(async () => corsResponse()),
+      handler: httpActionGeneric(async (_ctx, request) => {
+        const origin = request.headers.get("Origin") ?? undefined;
+        return corsResponse(origin);
+      }),
     });
 
     http.route({
       path: downloadPath,
       method: "GET",
       handler: httpActionGeneric(async (ctx, request) => {
+        const origin = request.headers.get("Origin") ?? undefined;
         const url = new URL(request.url);
         const downloadToken = url.searchParams.get("token");
         if (!downloadToken) {
-          return jsonError("Missing 'token' query parameter", 400);
+          return jsonError("Missing 'token' query parameter", 400, origin);
         }
 
         // For downloads, accessKey should come from checkDownloadRequest hook
@@ -347,7 +363,14 @@ export function registerRoutes(
             request,
           });
           if (result instanceof Response) {
-            return result;
+            return new Response(result.body, {
+              status: result.status,
+              statusText: result.statusText,
+              headers: {
+                ...Object.fromEntries(result.headers.entries()),
+                ...Object.fromEntries(corsHeaders(origin).entries()),
+              },
+            });
           }
         }
 
@@ -355,6 +378,7 @@ export function registerRoutes(
           return jsonError(
             "Missing required accessKey. Provide it via checkDownloadRequest hook.",
             401,
+            origin,
           );
         }
 
@@ -372,16 +396,17 @@ export function registerRoutes(
           return jsonError(
             "Download unavailable",
             statusCodeForDownloadError(result.status),
+            origin,
           );
         }
 
         const fileResponse = await fetch(result.downloadUrl);
         if (!fileResponse.ok || !fileResponse.body) {
-          return jsonError("File not available", 404);
+          return jsonError("File not available", 404, origin);
         }
 
         const filename = sanitizeFilename(url.searchParams.get("filename"));
-        const headers = corsHeaders();
+        const headers = corsHeaders(origin);
         headers.set("Cache-Control", "no-store");
         headers.set("Content-Disposition", `attachment; filename="${filename}"`);
 

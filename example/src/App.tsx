@@ -16,6 +16,7 @@ import type { StorageProvider } from "@gilhrpenner/convex-files-control";
 import { api } from "../convex/_generated/api";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
+import { useAuthToken } from "@convex-dev/auth/react";
 
 function App() {
   const [files, setFiles] = React.useState<FileItem[]>([]);
@@ -24,13 +25,18 @@ function App() {
   const [expiresAt, setExpiresAt] = React.useState<Date | null>(null);
   const [isUploading, setIsUploading] = React.useState(false);
 
+  const authToken = useAuthToken();
+
   const convexSiteUrl = React.useMemo(
     () => import.meta.env.VITE_CONVEX_URL.replace(".cloud", ".site"),
     [],
   );
 
   const { uploadFile } = useUploadFile(api.files, {
-    http: { baseUrl: convexSiteUrl },
+    http: {
+      baseUrl: convexSiteUrl,
+      authToken: authToken ?? undefined,
+    },
   });
 
   const fileCount = files.length;
