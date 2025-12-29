@@ -37,6 +37,10 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { useAuthToken } from "@convex-dev/auth/react";
 import { useMutation, useQuery } from "convex/react";
+import { toast } from "sonner";
+
+/** Demo limits */
+const DEMO_MAX_FILE_SIZE_MB = 5;
 
 function App() {
   const [files, setFiles] = React.useState<FileItem[]>([]);
@@ -75,20 +79,48 @@ function App() {
   const handleUpload = async () => {
     if (files.length === 0) return;
 
+    // Demo limit: Check file sizes before upload
+    const oversizedFiles = files.filter(
+      (f) => f.file.size > DEMO_MAX_FILE_SIZE_MB * 1024 * 1024
+    );
+    if (oversizedFiles.length > 0) {
+      toast.error(
+        `File size exceeds ${DEMO_MAX_FILE_SIZE_MB}MB limit: ${oversizedFiles.map((f) => f.file.name).join(", ")}`
+      );
+      return;
+    }
+
     setIsUploading(true);
 
     try {
       for (const fileItem of files) {
+        // Create a new File object with the user's custom name
+        const fileWithCustomName = new File(
+          [fileItem.file],
+          fileItem.name,
+          { type: fileItem.file.type }
+        );
+        
         await uploadFile({
-          file: fileItem.file,
+          file: fileWithCustomName,
           expiresAt: expiresAt?.getTime() ?? null,
           method,
           provider,
         });
       }
       setFiles([]);
+      
+      // Demo info toast
+      toast.success("Upload successful!", {
+        description:
+          "Demo note: Files expire in 24 hours and are limited to 5MB. In your own app, you have full control over these limits. HTTP Actions have a 20MB maximum.",
+        duration: 8000,
+      });
     } catch (error) {
       console.error("Upload failed:", error);
+      toast.error("Upload failed", {
+        description: error instanceof Error ? error.message : "Unknown error",
+      });
     } finally {
       setIsUploading(false);
     }
@@ -269,7 +301,7 @@ function App() {
                         </TableCell>
                         <TableCell>
                           {upload.expiresAt
-                            ? new Date(upload.expiresAt).toLocaleDateString()
+                            ? new Date(upload.expiresAt).toLocaleString()
                             : "Never"}
                         </TableCell>
                         <TableCell>

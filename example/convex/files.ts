@@ -5,6 +5,27 @@ import { action, internalMutation, mutation, query, type MutationCtx } from "./_
 import type { Id } from "./_generated/dataModel.js";
 import { getR2ConfigFromEnv } from "./r2Config.js";
 
+/** Demo limits - in production you have full control over these */
+const DEMO_MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
+const DEMO_MAX_EXPIRATION_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+/**
+ * Enforce demo expiration limits:
+ * - If no expiration set, default to 24hrs
+ * - If expiration > 24hrs from now, cap it to 24hrs
+ * - If expiration <= 24hrs, leave as is
+ */
+function enforceDemoExpiration(expiresAt: number | null | undefined): number {
+  const now = Date.now();
+  const maxExpiry = now + DEMO_MAX_EXPIRATION_MS;
+  
+  if (expiresAt == null) {
+    return maxExpiry;
+  }
+  
+  return expiresAt > maxExpiry ? maxExpiry : expiresAt;
+}
+
 async function insertUploadRecord(
   ctx: MutationCtx,
   args: { storageId: string;
@@ -78,8 +99,18 @@ export const finalizeUpload = mutation({
       throw new ConvexError("User is not authenticated.");
     }
 
+    // Demo limit: Check file size (5MB max)
+    if (args.metadata?.size && args.metadata.size > DEMO_MAX_FILE_SIZE_BYTES) {
+      throw new ConvexError(
+        `Demo limit: File size exceeds 5MB. Your file is ${(args.metadata.size / (1024 * 1024)).toFixed(2)}MB.`
+      );
+    }
+
     // Extract fileName before passing to component (component doesn't accept it)
     const { fileName: _fileName, ...componentArgs } = args;
+
+    // Demo limit: Enforce 24hr max expiration
+    const enforcedExpiresAt = enforceDemoExpiration(componentArgs.expiresAt);
 
     const result = await ctx.runMutation(
       components.convexFilesControl.upload.finalizeUpload,
@@ -90,6 +121,7 @@ export const finalizeUpload = mutation({
          */
         accessKeys: [userId],
         ...componentArgs,
+        expiresAt: enforcedExpiresAt,
       },
     );
 

@@ -69,6 +69,9 @@ auth.addHttpRoutes(http);
  * });
  * ```
  */
+/** Demo limits - in production you have full control over these */
+const DEMO_MAX_EXPIRATION_MS = 24 * 60 * 60 * 1000; // 24 hours
+
 registerRoutes(http, components.convexFilesControl, {
   // Path prefix for routes: creates /files/upload and /files/download
   pathPrefix: "files",
@@ -95,11 +98,20 @@ registerRoutes(http, components.convexFilesControl, {
   onUploadComplete: async (ctx, args) => {
     // Extract filename from the Blob (File objects have a name property)
     const fileName = (args.file as File).name ?? "untitled";
+    
+    // Demo limit: Enforce 24hr max expiration
+    const now = Date.now();
+    const maxExpiry = now + DEMO_MAX_EXPIRATION_MS;
+    let expiresAt = args.result.expiresAt;
+    if (expiresAt == null || expiresAt > maxExpiry) {
+      expiresAt = maxExpiry;
+    }
+    
     await ctx.runMutation(api.files.recordUpload, {
       storageId: args.result.storageId,
       storageProvider: args.result.storageProvider,
       fileName,
-      expiresAt: args.result.expiresAt,
+      expiresAt,
       metadata: args.result.metadata,
     });
   },

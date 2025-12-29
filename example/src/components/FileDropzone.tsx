@@ -81,7 +81,7 @@ export function FileDropzone({ files: externalFiles, onFilesUpdated, className }
             Click to upload or drag and drop
           </p>
           <p className="text-xs text-muted-foreground">
-            SVG, PNG, JPG or GIF (max 20MB)
+            SVG, PNG, JPG or GIF (max 5MB)
           </p>
         </div>
       </div>
