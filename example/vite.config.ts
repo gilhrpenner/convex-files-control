@@ -13,4 +13,10 @@ export default defineConfig({
       "react-dom": path.resolve(__dirname, "./node_modules/react-dom"),
     },
   },
+  // Ensure environment variables are available at build time
+  define: {
+    "import.meta.env.VITE_CONVEX_URL": JSON.stringify(
+      process.env.VITE_CONVEX_URL || "https://intent-tiger-143.convex.cloud"
+    ),
+  },
 });
