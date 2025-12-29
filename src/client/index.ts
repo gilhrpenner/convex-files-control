@@ -31,7 +31,7 @@ import {
   normalizePathPrefix,
   uploadFormFields,
 } from "../shared";
-import type { R2Config, StorageProvider } from "../shared/types";
+import type { R2Config, StorageProvider, UploadResult } from "../shared/types";
 import {
   corsResponse,
   jsonError,
@@ -141,6 +141,14 @@ export interface RegisterRoutesOptions {
     args: UploadRequestArgs,
   ) => UploadRequestResult | Promise<UploadRequestResult>;
   /**
+   * Optional hook called after a successful upload + finalizeUpload.
+   * Return a Response to override the default JSON response.
+   */
+  onUploadComplete?: (
+    ctx: RunHttpActionCtx,
+    args: UploadCompleteArgs,
+  ) => UploadCompleteResult | Promise<UploadCompleteResult>;
+  /**
    * Optional hook for rate limiting or request validation. Return a Response to
    * short-circuit the request (e.g. 429).
    */
@@ -191,6 +199,7 @@ export function registerRoutes(
     defaultUploadProvider = "convex",
     r2,
     checkUploadRequest,
+    onUploadComplete,
     checkDownloadRequest,
   } = options;
 
@@ -317,6 +326,28 @@ export function registerRoutes(
           accessKeys,
           expiresAt: expiresAt ?? undefined,
         });
+
+        if (onUploadComplete) {
+          const hookResult = await onUploadComplete(ctx, {
+            file,
+            provider,
+            accessKeys,
+            expiresAt: expiresAt ?? null,
+            request,
+            result,
+          });
+
+          if (hookResult instanceof Response) {
+            return new Response(hookResult.body, {
+              status: hookResult.status,
+              statusText: hookResult.statusText,
+              headers: {
+                ...Object.fromEntries(hookResult.headers.entries()),
+                ...Object.fromEntries(corsHeaders(origin).entries()),
+              },
+            });
+          }
+        }
 
         return jsonSuccess(result, origin);
       }),
@@ -577,6 +608,17 @@ export type UploadRequestArgs = {
 export type UploadRequestResult =
   | { accessKeys: string[] }
   | Response;
+
+export type UploadCompleteArgs = {
+  file: Blob;
+  provider: StorageProvider;
+  accessKeys: string[];
+  expiresAt: number | null;
+  request: Request;
+  result: UploadResult;
+};
+
+export type UploadCompleteResult = void | Response;
 
 export type DownloadRequestArgs = {
   downloadToken: string;

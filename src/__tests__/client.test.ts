@@ -342,6 +342,77 @@ describe("registerRoutes", () => {
     );
   });
 
+  test("upload route calls onUploadComplete hook", async () => {
+    const checkUploadRequest = mockCheckUploadRequest(["a"]);
+    const onUploadComplete = vi.fn(async () => undefined);
+    const router = createRouter();
+    registerRoutes(router, component, {
+      enableUploadRoute: true,
+      checkUploadRequest,
+      onUploadComplete,
+    });
+    const uploadRoute = getRoute(router, "/files/upload", "POST");
+    const handler = getHandler(uploadRoute.handler);
+
+    const uploadUrl = "https://upload.example.com";
+    const uploadToken = "upload-token";
+    const finalizeResult = {
+      storageId: "storage",
+      storageProvider: "convex",
+      expiresAt: null,
+      metadata: {
+        storageId: "storage",
+        size: 4,
+        sha256: "hash",
+        contentType: "text/plain",
+      },
+    };
+
+    const runMutation = vi.fn(async (ref, _args) => {
+      if (ref === component.upload.generateUploadUrl) {
+        return {
+          uploadUrl,
+          uploadToken,
+          uploadTokenExpiresAt: Date.now(),
+          storageProvider: "convex",
+          storageId: null,
+        };
+      }
+      if (ref === component.upload.finalizeUpload) {
+        return finalizeResult;
+      }
+      throw new Error("Unexpected mutation");
+    });
+
+    const ctx = makeCtx(runMutation);
+
+    const fetchMock = vi.fn(async (url) => {
+      if (url === uploadUrl) {
+        return new Response(JSON.stringify({ storageId: "storage" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response(null, { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const request = buildUploadRequest({
+      [uploadFormFields.file]: new File(["file"], "filename", { type: "text/plain" }),
+    });
+
+    await handler(ctx, request);
+
+    expect(onUploadComplete).toHaveBeenCalledTimes(1);
+    const hookArgs = onUploadComplete.mock.calls[0]?.[1];
+    expect(hookArgs).toMatchObject({
+      provider: "convex",
+      accessKeys: ["a"],
+      expiresAt: null,
+      result: finalizeResult,
+    });
+  });
+
   test("upload route handles upstream failures", async () => {
     const checkUploadRequest = mockCheckUploadRequest(["a"]);
     const router = createRouter();
