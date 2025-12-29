@@ -234,3 +234,49 @@ export const getFileDownloadUrl = mutation({
     };
   },
 });
+
+/**
+ * Create a shareable download link for a file.
+ * Unlike regular download grants, shareable links can be consumed by
+ * unauthenticated users (no accessKey required).
+ */
+export const createShareableLink = mutation({
+  args: {
+    _id: v.id("filesUploads"),
+    expiresAt: v.optional(v.number()),
+    maxUses: v.optional(v.number()),
+    password: v.optional(v.string()),
+    public: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) {
+      throw new ConvexError("User is not authenticated.");
+    }
+
+    const file = await ctx.db.get("filesUploads", args._id);
+    if (!file) {
+      throw new ConvexError("File not found.");
+    }
+    if (file.userId !== userId) {
+      throw new ConvexError("You do not have permission to share this file.");
+    }
+
+    const grant = await ctx.runMutation(
+      components.convexFilesControl.download.createDownloadGrant,
+      {
+        storageId: file.storageId,
+        shareableLink: args.public ?? false,
+        maxUses: args.maxUses ?? null,
+        expiresAt: args.expiresAt,
+        password: args.password,
+      },
+    );
+
+    return {
+      downloadToken: grant.downloadToken,
+      expiresAt: grant.expiresAt,
+      maxUses: grant.maxUses,
+    };
+  },
+});

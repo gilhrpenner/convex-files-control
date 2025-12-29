@@ -58,6 +58,7 @@
     "react-dropzone": "^14.3.8",
     "react-hook-form": "^7.69.0",
     "react-resizable-panels": "^4.0.16",
+    "react-router-dom": "^7.11.0",
     "recharts": "^2.15.4",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.4.0",

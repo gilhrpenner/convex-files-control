@@ -1,5 +1,6 @@
 import * as React from "react";
 import { StickyHeader } from "@/components/StickyHeader";
+import { ShareDialog } from "@/components/ShareDialog";
 import { FileDropzone, type FileItem } from "@/components/FileDropzone";
 import { ExpirationDateInput } from "@/components/ExpirationDateInput";
 import { Button } from "@/components/ui/button";
@@ -270,6 +271,10 @@ function App() {
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1">
+                            <ShareDialog
+                              fileId={upload._id}
+                              fileName={upload.fileName}
+                            />
                             <Button
                               variant="ghost"
                               size="icon"

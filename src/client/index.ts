@@ -160,13 +160,15 @@ export interface RegisterRoutesOptions {
     args: UploadCompleteArgs,
   ) => UploadCompleteResult | Promise<UploadCompleteResult>;
   /**
-   * Optional hook for rate limiting or request validation. Return a Response to
-   * short-circuit the request (e.g. 429).
+   * Optional hook for rate limiting, request validation, or authentication.
+   * Return a Response to short-circuit the request (e.g. 401, 429).
+   * Return { accessKey: string } to set the accessKey for non-public links.
+   * Return void to proceed without setting an accessKey.
    */
   checkDownloadRequest?: (
     ctx: RunHttpActionCtx,
     args: DownloadRequestArgs,
-  ) => void | Response | Promise<void | Response>;
+  ) => void | Response | { accessKey: string } | Promise<void | Response | { accessKey: string }>;
 }
 
 /**
@@ -427,6 +429,10 @@ export function registerRoutes(
                 ...Object.fromEntries(corsHeaders(origin).entries()),
               },
             });
+          }
+          // If hook returns { accessKey }, use it
+          if (result && typeof result === "object" && "accessKey" in result) {
+            accessKey = result.accessKey;
           }
         }
 

@@ -103,6 +103,23 @@ registerRoutes(http, components.convexFilesControl, {
       metadata: args.result.metadata,
     });
   },
+  /**
+   * Hook for download authentication.
+   * For non-public shareable links, we need to pass the user's ID as accessKey.
+   * For public links (shareableLink: true), accessKey is not required.
+   */
+  checkDownloadRequest: async (ctx) => {
+    // Try to get the authenticated user's ID
+    const userId = await getAuthUserId(ctx);
+    
+    // If authenticated, return the userId as accessKey
+    // The component will use this for non-public links
+    if (userId) {
+      return { accessKey: userId };
+    }
+    // Return nothing - let the request proceed
+    // Public shareable links don't need an accessKey
+  },
 });
 
 export default http;
