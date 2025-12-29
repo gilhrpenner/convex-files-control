@@ -81,7 +81,7 @@ registerRoutes(http, components.convexFilesControl, {
 
   // Required hook for upload authentication
   // Called before every upload to authenticate and provide accessKeys
-  checkUploadRequest: async (ctx) => {
+  checkUploadRequest: async (ctx, _args) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {

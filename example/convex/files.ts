@@ -79,7 +79,7 @@ export const finalizeUpload = mutation({
     }
 
     // Extract fileName before passing to component (component doesn't accept it)
-    const { fileName, ...componentArgs } = args;
+    const { fileName: _fileName, ...componentArgs } = args;
 
     const result = await ctx.runMutation(
       components.convexFilesControl.upload.finalizeUpload,
@@ -147,5 +147,37 @@ export const listUserUploads = query({
       .query("filesUploads")
       .withIndex("by_userId", (q) => q.eq("userId", userId))
       .collect();
+  },
+});
+
+export const deleteFile = mutation({
+  args: {
+    _id: v.id("filesUploads"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) {
+      throw new ConvexError("User is not authenticated.");
+    }
+
+    const file = await ctx.db.get("filesUploads", args._id);
+    if (!file) {
+      throw new ConvexError("File not found.");
+    }
+    if (file.userId !== userId) {
+      throw new ConvexError("You do not have permission to delete this file.");
+    }
+
+    await ctx.db.delete("filesUploads", args._id);
+
+    // Delete from the component's database and storage provider
+    const r2Config = getR2ConfigFromEnv();
+    await ctx.runMutation(
+      components.convexFilesControl.cleanUp.deleteFile,
+      {
+        storageId: file.storageId,
+        r2Config: r2Config ?? undefined,
+      },
+    );
   },
 });

@@ -25,14 +25,14 @@ import {
   EmptyTitle,
   EmptyDescription,
 } from "@/components/ui/empty";
-import { Upload, Loader2, FileIcon, Cloud, HardDrive } from "lucide-react";
+import { Upload, Loader2, FileIcon, Cloud, HardDrive, Trash } from "lucide-react";
 import { useUploadFile } from "@gilhrpenner/convex-files-control/react";
 import type { StorageProvider } from "@gilhrpenner/convex-files-control";
 import { api } from "../convex/_generated/api";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { useAuthToken } from "@convex-dev/auth/react";
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 
 function App() {
   const [files, setFiles] = React.useState<FileItem[]>([]);
@@ -46,6 +46,7 @@ function App() {
     api.files.listUserUploads,
     authToken ? {} : "skip",
   );
+  const deleteFile = useMutation(api.files.deleteFile);
 
   const convexSiteUrl = React.useMemo(
     () => import.meta.env.VITE_CONVEX_URL.replace(".cloud", ".site"),
@@ -85,6 +86,15 @@ function App() {
       console.error("Upload failed:", error);
     } finally {
       setIsUploading(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      // @ts-expect-error - we know the id is correct string
+      await deleteFile({ _id: id });
+    } catch (error) {
+      console.error("Delete failed:", error);
     }
   };
 
@@ -200,6 +210,7 @@ function App() {
                       <TableHead>Provider</TableHead>
                       <TableHead>Size</TableHead>
                       <TableHead>Expires</TableHead>
+                      <TableHead className="w-[50px]"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -229,6 +240,16 @@ function App() {
                           {upload.expiresAt
                             ? new Date(upload.expiresAt).toLocaleDateString()
                             : "Never"}
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                            onClick={() => void handleDelete(upload._id)}
+                          >
+                            <Trash className="h-4 w-4" />
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}
