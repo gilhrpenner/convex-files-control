@@ -266,8 +266,15 @@ function App() {
                   </EmptyHeader>
                 </Empty>
               ) : (
-                <Table>
-                  <TableHeader>
+                <>
+                  {userUploads.some((u) => u.expiresAt != null && u.expiresAt < Date.now()) && (
+                    <div className="mb-4 rounded-md bg-yellow-500/10 border border-yellow-500/30 px-4 py-3 text-sm text-yellow-200">
+                      <strong>Note:</strong> Expired files are automatically cleaned up by a scheduled cron job.
+                      See the <a href="https://github.com/gilhrpenner/convex-files-control#cleanup" target="_blank" rel="noopener noreferrer" className="underline hover:text-yellow-100">documentation</a> for details on configuring cleanup intervals.
+                    </div>
+                  )}
+                  <Table>
+                    <TableHeader>
                     <TableRow>
                       <TableHead>File name</TableHead>
                       <TableHead>Provider</TableHead>
@@ -301,37 +308,48 @@ function App() {
                         </TableCell>
                         <TableCell>
                           {upload.expiresAt
-                            ? new Date(upload.expiresAt).toLocaleString()
+                            ? upload.expiresAt < Date.now()
+                              ? <span className="text-destructive font-medium">Expired</span>
+                              : new Date(upload.expiresAt).toLocaleString()
                             : "Never"}
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-1">
-                            <ShareDialog
-                              fileId={upload._id}
-                              fileName={upload.fileName}
-                            />
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-muted-foreground hover:text-primary"
-                              onClick={() => void handleDownload(upload._id)}
-                            >
-                              <Download className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                              onClick={() => void handleDelete(upload._id)}
-                            >
-                              <Trash className="h-4 w-4" />
-                            </Button>
-                          </div>
+                          {(() => {
+                            const isExpired = upload.expiresAt != null && upload.expiresAt < Date.now();
+                            return (
+                              <div className="flex items-center gap-1">
+                                <ShareDialog
+                                  fileId={upload._id}
+                                  fileName={upload.fileName}
+                                  disabled={isExpired}
+                                />
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-muted-foreground hover:text-primary"
+                                  onClick={() => void handleDownload(upload._id)}
+                                  disabled={isExpired}
+                                  title={isExpired ? "File has expired" : "Download"}
+                                >
+                                  <Download className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                  onClick={() => void handleDelete(upload._id)}
+                                >
+                                  <Trash className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            );
+                          })()}
                         </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
+                </>
               )}
             </div>
           </div>

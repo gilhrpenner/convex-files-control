@@ -21,9 +21,10 @@ import { type Id } from "../../convex/_generated/dataModel";
 interface ShareDialogProps {
   fileId: Id<"filesUploads">;
   fileName: string;
+  disabled?: boolean;
 }
 
-export function ShareDialog({ fileId, fileName }: ShareDialogProps) {
+export function ShareDialog({ fileId, fileName, disabled }: ShareDialogProps) {
   const [open, setOpen] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [generatedUrl, setGeneratedUrl] = React.useState<string | null>(null);
@@ -83,6 +84,8 @@ export function ShareDialog({ fileId, fileName }: ShareDialogProps) {
           variant="ghost"
           size="icon"
           className="h-8 w-8 text-muted-foreground hover:text-primary"
+          disabled={disabled}
+          title={disabled ? "File has expired" : "Share"}
         >
           <Share2 className="h-4 w-4" />
         </Button>

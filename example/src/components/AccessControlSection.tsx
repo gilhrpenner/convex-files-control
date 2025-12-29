@@ -17,7 +17,11 @@ import { Id } from "../../convex/_generated/dataModel";
 import { ExpirationDateInput } from "./ExpirationDateInput";
 
 export function AccessControlSection() {
-  const uploads = useQuery(api.files.listUserUploads, {}) ?? [];
+  const allUploads = useQuery(api.files.listUserUploads, {}) ?? [];
+  // Filter out expired files to prevent errors when trying to update them
+  const uploads = allUploads.filter(
+    (u) => u.expiresAt == null || u.expiresAt > Date.now()
+  );
   const [selectedFileId, setSelectedFileId] = React.useState<string>("");
   const [newAccessKey, setNewAccessKey] = React.useState("");
   const [isSubmitting, setIsSubmitting] = React.useState(false);
