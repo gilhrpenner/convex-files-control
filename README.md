@@ -94,7 +94,7 @@ const http = httpRouter();
 
 registerRoutes(http, components.convexFilesControl, {
   pathPrefix: "/files", // Routes will be /files/download (upload is opt-in)
-  requireAccessKey: false, // Set to true to enforce accessKey param on downloads
+  requireAccessKey: false, // Set to true to require accessKey from checkDownloadRequest
   enableUploadRoute: true, // Opt-in to /files/upload
 });
 
@@ -215,11 +215,13 @@ export const generateLink = mutation({
       baseUrl: "https://<your-convex-site>",
       downloadToken: grant.downloadToken,
       filename: "report.pdf", // Optional: force filename
-      // accessKey: "user_123" // Optional: if you want to embed the key (less secure)
     });
   },
 });
 ```
+
+If you require access keys for downloads, supply them via `checkDownloadRequest`
+and enable `requireAccessKey` on `registerRoutes` (they are not embedded in the URL).
 
 The user then visits this URL. The component validates the grant and redirects
 to the secure storage URL.

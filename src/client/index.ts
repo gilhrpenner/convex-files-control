@@ -100,15 +100,59 @@ const requireR2Config = (input?: R2ConfigInput, context?: string): R2Config => {
   );
 };
 
+const normalizeOptionalHeaderName = (value?: string) => {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+};
+
+const getOrigin = (request: Request) =>
+  request.headers.get("Origin") ?? undefined;
+
+const withCors = (
+  response: Response,
+  origin?: string,
+  allowHeaders?: string[],
+) => {
+  const headers = new Headers(response.headers);
+  const cors = corsHeaders(origin, allowHeaders);
+  for (const [key, value] of cors.entries()) {
+    headers.set(key, value);
+  }
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+};
+
+const resolveUploadProvider = (
+  value: FormDataEntryValue | null,
+  fallback: StorageProvider,
+): StorageProvider => {
+  const providerValue = typeof value === "string" ? value : "";
+  return isStorageProvider(providerValue) ? providerValue : fallback;
+};
+
 function bytesToBase64(bytes: Uint8Array): string {
+  if (typeof Buffer !== "undefined") {
+    return Buffer.from(bytes).toString("base64");
+  }
   if (typeof btoa === "function") {
+    if (typeof TextDecoder === "function") {
+      try {
+        return btoa(new TextDecoder("latin1").decode(bytes));
+      } catch {
+        // Fallback below for environments without latin1 support.
+      }
+    }
     let binary = "";
-    for (const byte of bytes) {
-      binary += String.fromCharCode(byte);
+    const chunkSize = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
     }
     return btoa(binary);
   }
-  return Buffer.from(bytes).toString("base64");
+  throw new Error("Base64 encoding is not available in this environment.");
 }
 
 export interface RegisterRoutesOptions {
@@ -217,6 +261,11 @@ export function registerRoutes(
   } = options;
 
   const normalizedPrefix = normalizePathPrefix(pathPrefix);
+  const passwordHeaderName = normalizeOptionalHeaderName(passwordHeader);
+  const passwordQueryKey = normalizeOptionalHeaderName(passwordQueryParam);
+  const downloadCorsAllowHeaders = passwordHeaderName
+    ? [passwordHeaderName]
+    : undefined;
   const uploadPath = `${normalizedPrefix}/upload`;
   const downloadPath = `${normalizedPrefix}/download`;
 
@@ -232,7 +281,7 @@ export function registerRoutes(
       path: uploadPath,
       method: "OPTIONS",
       handler: httpActionGeneric(async (_ctx, request) => {
-        const origin = request.headers.get("Origin") ?? undefined;
+        const origin = getOrigin(request);
         return corsResponse(origin);
       }),
     });
@@ -241,7 +290,7 @@ export function registerRoutes(
       path: uploadPath,
       method: "POST",
       handler: httpActionGeneric(async (ctx, request) => {
-        const origin = request.headers.get("Origin") ?? undefined;
+        const origin = getOrigin(request);
         const contentType = request.headers.get("Content-Type") ?? "";
         if (!contentType.includes("multipart/form-data")) {
           return jsonError("Content-Type must be multipart/form-data", 415, origin);
@@ -260,12 +309,10 @@ export function registerRoutes(
           return jsonError("'expiresAt' must be a number or null", 400, origin);
         }
 
-        const providerRaw = formData.get(uploadFormFields.provider);
-        const providerValue =
-          typeof providerRaw === "string" ? providerRaw : "";
-        const provider = isStorageProvider(providerValue)
-          ? providerValue
-          : defaultUploadProvider;
+        const provider = resolveUploadProvider(
+          formData.get(uploadFormFields.provider),
+          defaultUploadProvider,
+        );
 
         // Call the auth hook to get access keys
         const hookResult = await checkUploadRequest(ctx, {
@@ -277,14 +324,11 @@ export function registerRoutes(
 
         // If hook returns a Response, wrap it with CORS headers
         if (hookResult instanceof Response) {
-          return new Response(hookResult.body, {
-            status: hookResult.status,
-            statusText: hookResult.statusText,
-            headers: {
-              ...Object.fromEntries(hookResult.headers.entries()),
-              ...Object.fromEntries(corsHeaders(origin).entries()),
-            },
-          });
+          return withCors(hookResult, origin);
+        }
+
+        if (!hookResult || typeof hookResult !== "object") {
+          return jsonError("checkUploadRequest must return accessKeys", 500, origin);
         }
 
         const { accessKeys } = hookResult;
@@ -365,14 +409,7 @@ export function registerRoutes(
           });
 
           if (hookResult instanceof Response) {
-            return new Response(hookResult.body, {
-              status: hookResult.status,
-              statusText: hookResult.statusText,
-              headers: {
-                ...Object.fromEntries(hookResult.headers.entries()),
-                ...Object.fromEntries(corsHeaders(origin).entries()),
-              },
-            });
+            return withCors(hookResult, origin);
           }
         }
 
@@ -386,8 +423,8 @@ export function registerRoutes(
       path: downloadPath,
       method: "OPTIONS",
       handler: httpActionGeneric(async (_ctx, request) => {
-        const origin = request.headers.get("Origin") ?? undefined;
-        return corsResponse(origin);
+        const origin = getOrigin(request);
+        return corsResponse(origin, downloadCorsAllowHeaders);
       }),
     });
 
@@ -395,21 +432,26 @@ export function registerRoutes(
       path: downloadPath,
       method: "GET",
       handler: httpActionGeneric(async (ctx, request) => {
-        const origin = request.headers.get("Origin") ?? undefined;
+        const origin = getOrigin(request);
         const url = new URL(request.url);
         const downloadToken = url.searchParams.get("token");
         if (!downloadToken) {
-          return jsonError("Missing 'token' query parameter", 400, origin);
+          return jsonError(
+            "Missing 'token' query parameter",
+            400,
+            origin,
+            downloadCorsAllowHeaders,
+          );
         }
 
         // For downloads, accessKey should come from checkDownloadRequest hook
         let accessKey: string | undefined;
 
-        const passwordFromHeader = passwordHeader
-          ? request.headers.get(passwordHeader)
+        const passwordFromHeader = passwordHeaderName
+          ? request.headers.get(passwordHeaderName)
           : null;
-        const passwordFromQuery = passwordQueryParam
-          ? url.searchParams.get(passwordQueryParam)
+        const passwordFromQuery = passwordQueryKey
+          ? url.searchParams.get(passwordQueryKey)
           : null;
         const password = passwordFromHeader ?? passwordFromQuery ?? undefined;
 
@@ -421,14 +463,7 @@ export function registerRoutes(
             request,
           });
           if (result instanceof Response) {
-            return new Response(result.body, {
-              status: result.status,
-              statusText: result.statusText,
-              headers: {
-                ...Object.fromEntries(result.headers.entries()),
-                ...Object.fromEntries(corsHeaders(origin).entries()),
-              },
-            });
+            return withCors(result, origin, downloadCorsAllowHeaders);
           }
           // If hook returns { accessKey }, use it
           if (result && typeof result === "object" && "accessKey" in result) {
@@ -441,6 +476,7 @@ export function registerRoutes(
             "Missing required accessKey. Provide it via checkDownloadRequest hook.",
             401,
             origin,
+            downloadCorsAllowHeaders,
           );
         }
 
@@ -459,16 +495,17 @@ export function registerRoutes(
             "Download unavailable",
             statusCodeForDownloadError(result.status),
             origin,
+            downloadCorsAllowHeaders,
           );
         }
 
         const fileResponse = await fetch(result.downloadUrl);
         if (!fileResponse.ok || !fileResponse.body) {
-          return jsonError("File not available", 404, origin);
+          return jsonError("File not available", 404, origin, downloadCorsAllowHeaders);
         }
 
         const filename = sanitizeFilename(url.searchParams.get("filename"));
-        const headers = corsHeaders(origin);
+        const headers = corsHeaders(origin, downloadCorsAllowHeaders);
         headers.set("Cache-Control", "no-store");
         headers.set("Content-Disposition", `attachment; filename="${filename}"`);
 
@@ -492,7 +529,6 @@ export interface BuildDownloadUrlOptions {
   baseUrl: string;
   downloadToken: string;
   pathPrefix?: string;
-  accessKey?: string;
   filename?: string;
 }
 
@@ -504,13 +540,13 @@ export interface BuildDownloadUrlOptions {
  *
  * Note: Avoid placing passwords in query params; they can leak into logs or
  * caches. Prefer headers or POST flows when possible.
+ * Access keys are not included in the URL; enforce them via checkDownloadRequest.
  *
  * @example
  * ```ts
  * const url = buildDownloadUrl({
  *   baseUrl: "https://your-app.convex.site",
  *   downloadToken,
- *   accessKey: "user_123",
  *   filename: "report.pdf",
  * });
  * ```
@@ -519,7 +555,6 @@ export function buildDownloadUrl({
   baseUrl,
   downloadToken,
   pathPrefix = DEFAULT_PATH_PREFIX,
-  accessKey,
   filename,
 }: BuildDownloadUrlOptions): string {
   const normalizedBase = normalizeBaseUrl(baseUrl);
@@ -529,7 +564,6 @@ export function buildDownloadUrl({
     "download",
   );
   const params = new URLSearchParams({ token: downloadToken });
-  if (accessKey) params.set("accessKey", accessKey);
   if (filename) params.set("filename", filename);
   return `${endpoint}?${params.toString()}`;
 }

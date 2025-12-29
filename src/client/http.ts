@@ -1,8 +1,33 @@
-export function corsHeaders(origin?: string): Headers {
+const DEFAULT_ALLOW_HEADERS = ["Content-Type", "Authorization"];
+
+function buildAllowHeaders(extra?: string[]): string {
+  const headers: string[] = [];
+  const seen = new Set<string>();
+
+  const addHeader = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    headers.push(trimmed);
+  };
+
+  for (const header of DEFAULT_ALLOW_HEADERS) {
+    addHeader(header);
+  }
+  for (const header of extra ?? []) {
+    addHeader(header);
+  }
+
+  return headers.join(", ");
+}
+
+export function corsHeaders(origin?: string, allowHeaders?: string[]): Headers {
   const headers = new Headers({
     "Access-Control-Allow-Origin": origin || "*",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Headers": buildAllowHeaders(allowHeaders),
   });
   if (origin) {
     headers.set("Access-Control-Allow-Credentials", "true");
@@ -10,19 +35,31 @@ export function corsHeaders(origin?: string): Headers {
   return headers;
 }
 
-export function corsResponse(origin?: string): Response {
-  return new Response(null, { status: 204, headers: corsHeaders(origin) });
+export function corsResponse(origin?: string, allowHeaders?: string[]): Response {
+  return new Response(null, {
+    status: 204,
+    headers: corsHeaders(origin, allowHeaders),
+  });
 }
 
-export function jsonSuccess(data: unknown, origin?: string): Response {
-  const headers = corsHeaders(origin);
+export function jsonSuccess(
+  data: unknown,
+  origin?: string,
+  allowHeaders?: string[],
+): Response {
+  const headers = corsHeaders(origin, allowHeaders);
   headers.set("Content-Type", "application/json");
 
   return new Response(JSON.stringify(data), { status: 200, headers });
 }
 
-export function jsonError(message: string, status: number, origin?: string): Response {
-  const headers = corsHeaders(origin);
+export function jsonError(
+  message: string,
+  status: number,
+  origin?: string,
+  allowHeaders?: string[],
+): Response {
+  const headers = corsHeaders(origin, allowHeaders);
   headers.set("Content-Type", "application/json");
 
   return new Response(JSON.stringify({ error: message }), { status, headers });
