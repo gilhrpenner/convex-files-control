@@ -661,17 +661,37 @@ export const getFileDetails = query({
  *
  * This wraps the component's cleanupExpired mutation since cron jobs
  * cannot directly call component functions.
+ *
+ * Also cleans up the local filesUploads table to keep it in sync.
  */
 export const cleanupExpiredFiles = internalMutation({
   args: {},
   handler: async (ctx) => {
+    const now = Date.now();
+    const limit = 500;
+
+    // Clean up expired files from our local filesUploads table
+    const expiredLocalFiles = await ctx.db
+      .query("filesUploads")
+      .withIndex("by_expiresAt", (q) => q.gt("expiresAt", 0).lte("expiresAt", now))
+      .take(limit);
+
+    await Promise.all(expiredLocalFiles.map((f) => ctx.db.delete("filesUploads", f._id)));
+
+    // Call the component's cleanup to delete from component DB and storage
     const r2Config = getR2ConfigFromEnv();
-    return await ctx.runMutation(
+    const componentResult = await ctx.runMutation(
       components.convexFilesControl.cleanUp.cleanupExpired,
       {
-        limit: 500,
+        limit,
         r2Config: r2Config ?? undefined,
       },
     );
+
+    return {
+      localDeletedCount: expiredLocalFiles.length,
+      componentResult,
+    };
   },
 });
+

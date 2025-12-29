@@ -25,5 +25,6 @@ export default defineSchema({
     ),
   })
     .index("by_storageId", ["storageId"])
-    .index("by_userId", ["userId"]),
+    .index("by_userId", ["userId"])
+    .index("by_expiresAt", ["expiresAt"]),
 });
