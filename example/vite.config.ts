@@ -11,7 +11,9 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
       react: path.resolve(__dirname, "./node_modules/react"),
       "react-dom": path.resolve(__dirname, "./node_modules/react-dom"),
+      convex: path.resolve(__dirname, "./node_modules/convex"),
     },
+    dedupe: ["react", "react-dom", "convex"],
   },
   // Ensure environment variables are available at build time
   define: {
