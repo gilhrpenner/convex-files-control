@@ -96,9 +96,13 @@ registerRoutes(http, components.convexFilesControl, {
     return { accessKeys: [userId] };
   },
   onUploadComplete: async (ctx, args) => {
-    // Extract filename from the Blob (File objects have a name property)
-    const fileName = (args.file as File).name ?? "untitled";
-    
+    // Prefer an explicit form field if the client supplied one
+    const fileNameFromForm = args.formData.get("fileName");
+    const fileName =
+      typeof fileNameFromForm === "string"
+        ? fileNameFromForm
+        : (args.file as File).name ?? "untitled";
+
     // Demo limit: Enforce 24hr max expiration
     const now = Date.now();
     const maxExpiry = now + DEMO_MAX_EXPIRATION_MS;
@@ -106,7 +110,7 @@ registerRoutes(http, components.convexFilesControl, {
     if (expiresAt == null || expiresAt > maxExpiry) {
       expiresAt = maxExpiry;
     }
-    
+
     await ctx.runMutation(api.files.recordUpload, {
       storageId: args.result.storageId,
       storageProvider: args.result.storageProvider,
@@ -123,7 +127,7 @@ registerRoutes(http, components.convexFilesControl, {
   checkDownloadRequest: async (ctx) => {
     // Try to get the authenticated user's ID
     const userId = await getAuthUserId(ctx);
-    
+
     // If authenticated, return the userId as accessKey
     // The component will use this for non-public links
     if (userId) {

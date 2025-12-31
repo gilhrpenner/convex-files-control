@@ -404,7 +404,7 @@ export function registerRoutes(
             provider,
             accessKeys,
             expiresAt: expiresAt ?? null,
-            request,
+            formData,
             result,
           });
 
@@ -618,10 +618,11 @@ type RunActionCtx = {
 
 /**
  * Context type for HTTP action hooks. Includes auth for authentication
- * and runMutation for calling component mutations.
+ * and runQuery/runMutation for calling component functions.
  */
 export type RunHttpActionCtx = {
   auth: GenericActionCtx<GenericDataModel>["auth"];
+  runQuery: GenericActionCtx<GenericDataModel>["runQuery"];
   runMutation: GenericActionCtx<GenericDataModel>["runMutation"];
 };
 
@@ -679,7 +680,7 @@ export type UploadCompleteArgs = {
   provider: StorageProvider;
   accessKeys: string[];
   expiresAt: number | null;
-  request: Request;
+  formData: FormData;
   result: UploadResult;
 };
 

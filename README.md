@@ -134,8 +134,12 @@ registerRoutes(http, components.convexFilesControl, {
   },
 
   // Optional: persist file metadata after a successful HTTP upload
-  onUploadComplete: async (ctx, { result, file }) => {
-    const fileName = (file as File).name ?? "untitled";
+  onUploadComplete: async (ctx, { result, file, formData }) => {
+    const fileNameFromForm = formData.get("fileName");
+    const fileName =
+      typeof fileNameFromForm === "string"
+        ? fileNameFromForm
+        : (file as File).name ?? "untitled";
     // await ctx.runMutation(api.files.recordUpload, { ...result, fileName });
   },
 
@@ -156,7 +160,8 @@ HTTP upload requires `multipart/form-data` with fields:
 - `expiresAt` (optional, timestamp or `null`)
 
 Access keys are not accepted via the form; they must come from
-`checkUploadRequest`.
+`checkUploadRequest`. Additional form fields are available on
+`onUploadComplete` via `formData`.
 
 Useful route options:
 

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.0 (2025-12-31)
+
+### Breaking Changes
+
+- **http!**: `onUploadComplete` now receives `formData` instead of `request`.
+
+### Features
+
+- **http**: Added `runQuery` to `RunHttpActionCtx` for HTTP hooks.
+
+---
+
 ## 0.2.0 (2025-12-29)
 
 ### Breaking Changes
