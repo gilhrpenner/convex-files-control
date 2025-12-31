@@ -18,33 +18,37 @@ const DEMO_MAX_EXPIRATION_MS = 24 * 60 * 60 * 1000; // 24 hours
 function enforceDemoExpiration(expiresAt: number | null | undefined): number {
   const now = Date.now();
   const maxExpiry = now + DEMO_MAX_EXPIRATION_MS;
-  
+
   if (expiresAt == null) {
     return maxExpiry;
   }
-  
+
   return expiresAt > maxExpiry ? maxExpiry : expiresAt;
 }
 
 async function insertUploadRecord(
   ctx: MutationCtx,
-  args: { storageId: string;
-  storageProvider: "convex" | "r2";
-  fileName: string;
-  expiresAt: number | null;
-  metadata: {
+  args: {
     storageId: string;
-    size: number;
-    sha256: string;
-    contentType: string | null;
-  } | null;
-  userId: Id<"users"> },
+    storageProvider: "convex" | "r2";
+    fileName: string;
+    virtualPath?: string | null;
+    expiresAt: number | null;
+    metadata: {
+      storageId: string;
+      size: number;
+      sha256: string;
+      contentType: string | null;
+    } | null;
+    userId: Id<"users">;
+  },
 ) {
   await ctx.db.insert("filesUploads", {
     storageId: args.storageId,
     storageProvider: args.storageProvider,
     userId: args.userId,
     fileName: args.fileName,
+    virtualPath: args.virtualPath ?? undefined,
     expiresAt: args.expiresAt,
     metadata: args.metadata,
   });
@@ -53,6 +57,7 @@ async function insertUploadRecord(
 export const generateUploadUrl = mutation({
   args: {
     provider: v.union(v.literal("convex"), v.literal("r2")),
+    virtualPath: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
@@ -74,6 +79,7 @@ export const generateUploadUrl = mutation({
       {
         provider: args.provider,
         r2Config: r2Config ?? undefined,
+        virtualPath: args.virtualPath,
       },
     );
   },
@@ -84,6 +90,7 @@ export const finalizeUpload = mutation({
     uploadToken: v.string(),
     storageId: v.string(),
     fileName: v.string(),
+    virtualPath: v.optional(v.string()),
     expiresAt: v.optional(v.union(v.null(), v.number())),
     metadata: v.optional(
       v.object({
@@ -130,6 +137,7 @@ export const finalizeUpload = mutation({
       storageId: result.storageId,
       storageProvider: result.storageProvider,
       fileName: args.fileName,
+      virtualPath: result.virtualPath ?? args.virtualPath ?? null,
       expiresAt: result.expiresAt,
       metadata: result.metadata,
     });
@@ -143,6 +151,7 @@ export const recordUpload = mutation({
     storageId: v.string(),
     storageProvider: v.union(v.literal("convex"), v.literal("r2")),
     fileName: v.string(),
+    virtualPath: v.optional(v.string()),
     expiresAt: v.union(v.null(), v.number()),
     metadata: v.union(
       v.object({
@@ -328,14 +337,17 @@ export const transferFile = action({
   args: {
     _id: v.id("filesUploads"),
     targetProvider: v.union(v.literal("convex"), v.literal("r2")),
+    virtualPath: v.optional(v.string()),
   },
   returns: v.object({
     storageId: v.string(),
     storageProvider: v.union(v.literal("convex"), v.literal("r2")),
+    virtualPath: v.union(v.string(), v.null()),
   }),
   handler: async (ctx, args): Promise<{
     storageId: string;
     storageProvider: "convex" | "r2";
+    virtualPath: string | null;
   }> => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) {
@@ -362,6 +374,7 @@ export const transferFile = action({
         storageId: file.storageId,
         targetProvider: args.targetProvider,
         r2Config: r2Config ?? undefined,
+        virtualPath: args.virtualPath,
       },
     );
 
@@ -370,6 +383,7 @@ export const transferFile = action({
       _id: args._id,
       storageId: result.storageId,
       storageProvider: result.storageProvider,
+      virtualPath: result.virtualPath ?? args.virtualPath,
     });
 
     return result;
@@ -396,6 +410,7 @@ export const updateUploadStorageInfo = mutation({
     _id: v.id("filesUploads"),
     storageId: v.string(),
     storageProvider: v.union(v.literal("convex"), v.literal("r2")),
+    virtualPath: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
@@ -411,10 +426,20 @@ export const updateUploadStorageInfo = mutation({
       throw new ConvexError("You do not have permission to update this file.");
     }
 
-    await ctx.db.patch("filesUploads", args._id, {
+    const updates: {
+      storageId: string;
+      storageProvider: "convex" | "r2";
+      virtualPath?: string;
+    } = {
       storageId: args.storageId,
       storageProvider: args.storageProvider,
-    });
+    };
+
+    if (args.virtualPath !== undefined) {
+      updates.virtualPath = args.virtualPath;
+    }
+
+    await ctx.db.patch("filesUploads", args._id, updates);
   },
 });
 
@@ -694,4 +719,3 @@ export const cleanupExpiredFiles = internalMutation({
     };
   },
 });
-

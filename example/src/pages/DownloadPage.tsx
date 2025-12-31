@@ -22,7 +22,7 @@ export function DownloadPage() {
   const authToken = useAuthToken();
 
   const convexSiteUrl = React.useMemo(
-    () => import.meta.env.VITE_CONVEX_URL.replace(".cloud", ".site"),
+    () => (import.meta.env.VITE_CONVEX_URL || "https://intent-tiger-143.convex.cloud").replace(".cloud", ".site"),
     [],
   );
 

@@ -51,7 +51,7 @@ auth.addHttpRoutes(http);
  *     // Generate upload URL from component
  *     const { uploadUrl, uploadToken } = await ctx.runMutation(
  *       components.convexFilesControl.upload.generateUploadUrl,
- *       { provider: "convex" }
+ *       { provider: "convex", virtualPath: "/tenant/123/report.pdf" }
  *     );
  *
  *     // Upload file to storage
@@ -61,7 +61,7 @@ auth.addHttpRoutes(http);
  *     // Finalize with your accessKeys
  *     const result = await ctx.runMutation(
  *       components.convexFilesControl.upload.finalizeUpload,
- *       { uploadToken, storageId, accessKeys: [userId] }
+ *       { uploadToken, storageId, accessKeys: [userId], virtualPath: "/tenant/123/report.pdf" }
  *     );
  *
  *     return new Response(JSON.stringify(result), { status: 200 });
@@ -111,10 +111,17 @@ registerRoutes(http, components.convexFilesControl, {
       expiresAt = maxExpiry;
     }
 
+    const virtualPathFromForm = args.formData.get("virtualPath");
+    const virtualPath =
+      typeof virtualPathFromForm === "string" && virtualPathFromForm.trim()
+        ? virtualPathFromForm.trim()
+        : args.result.virtualPath ?? undefined;
+
     await ctx.runMutation(api.files.recordUpload, {
       storageId: args.result.storageId,
       storageProvider: args.result.storageProvider,
       fileName,
+      virtualPath,
       expiresAt,
       metadata: args.result.metadata,
     });

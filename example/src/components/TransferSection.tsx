@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Input } from "@/components/ui/input";
 import { ArrowRightLeft, Loader2, RefreshCw } from "lucide-react";
 import { DocumentationPanel } from "./DocumentationPanel";
 import { Id } from "../../convex/_generated/dataModel";
@@ -26,6 +27,7 @@ export function TransferSection() {
   const [selectedFileId, setSelectedFileId] = React.useState<string>("");
   const [targetProvider, setTargetProvider] = React.useState<"convex" | "r2">("r2");
   const [isTransferring, setIsTransferring] = React.useState(false);
+  const [virtualPath, setVirtualPath] = React.useState("");
 
   // Automatically select first file if nothing selected
   React.useEffect(() => {
@@ -35,6 +37,18 @@ export function TransferSection() {
   }, [uploads, selectedFileId]);
 
   const selectedFile = uploads.find((u) => u._id === selectedFileId);
+  const isSameProvider = selectedFile?.storageProvider === targetProvider;
+
+  const resolveVirtualPath = React.useCallback(() => {
+    if (!selectedFile) return undefined;
+    const trimmed = virtualPath.trim();
+    if (!trimmed) return undefined;
+    if (trimmed.endsWith("/")) {
+      const base = trimmed.replace(/\/+$/g, "");
+      return `${base}/${selectedFile.fileName}`;
+    }
+    return trimmed;
+  }, [selectedFile, virtualPath]);
 
   const handleTransfer = async () => {
     if (!selectedFileId) return;
@@ -44,6 +58,7 @@ export function TransferSection() {
       await transferFile({
         _id: selectedFileId as Id<"filesUploads">,
         targetProvider,
+        virtualPath: resolveVirtualPath(),
       });
       // Optionally show success message
     } catch (error) {
@@ -107,9 +122,28 @@ export function TransferSection() {
             )}
           </div>
 
+          <div className="space-y-2">
+            <Label htmlFor="transfer-virtual-path">New virtual path (optional)</Label>
+            <Input
+              id="transfer-virtual-path"
+              placeholder={selectedFile?.virtualPath ?? "/tenant/123/report.pdf"}
+              value={virtualPath}
+              onChange={(e) => setVirtualPath(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Leave empty to keep the existing path. For R2 transfers, this becomes the object key.
+            </p>
+          </div>
+
           <Button
             className="w-full shadow-lg shadow-primary/20"
-            disabled={!selectedFile || isTransferring || selectedFile.storageProvider === targetProvider}
+            disabled={
+              !selectedFile ||
+              isTransferring ||
+              (isSameProvider &&
+                (!resolveVirtualPath() ||
+                  resolveVirtualPath() === selectedFile?.virtualPath))
+            }
             onClick={() => void handleTransfer()}
           >
             {isTransferring ? (
@@ -117,7 +151,9 @@ export function TransferSection() {
             ) : (
               <ArrowRightLeft className="mr-2 h-4 w-4" />
             )}
-            Transfer to {targetProvider === "convex" ? "Convex" : "R2"}
+            {isSameProvider
+              ? "Update path"
+              : `Transfer to ${targetProvider === "convex" ? "Convex" : "R2"}`}
           </Button>
         </div>
       </div>

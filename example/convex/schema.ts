@@ -13,6 +13,7 @@ export default defineSchema({
     storageProvider: v.union(v.literal("convex"), v.literal("r2")),
     userId: v.id("users"),
     fileName: v.string(),
+    virtualPath: v.optional(v.string()),
     expiresAt: v.union(v.null(), v.number()),
     metadata: v.union(
       v.object({
@@ -25,6 +26,7 @@ export default defineSchema({
     ),
   })
     .index("by_storageId", ["storageId"])
+    .index("by_virtualPath", ["virtualPath"])
     .index("by_userId", ["userId"])
     .index("by_expiresAt", ["expiresAt"]),
 });
