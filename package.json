@@ -45,7 +45,8 @@
     "prepublishOnly": "npm run build:clean",
     "alpha": "npm version prerelease --preid alpha && npm publish --tag alpha && git push --follow-tags",
     "release": "npm version patch && npm publish && git push --follow-tags",
-    "version": "vim -c 'normal o' -c 'normal o## '$npm_package_version CHANGELOG.md && prettier -w CHANGELOG.md && git add CHANGELOG.md"
+    "version": "vim -c 'normal o' -c 'normal o## '$npm_package_version CHANGELOG.md && prettier -w CHANGELOG.md && git add CHANGELOG.md",
+    "check": "npm run build:clean && npm run typecheck && npm run lint && npm run test"
   },
   "files": [
     "dist",
