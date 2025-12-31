@@ -156,6 +156,43 @@ describe("transferFile", () => {
     ).rejects.toThrow("File not found.");
   });
 
+  test("throws when target storageId already exists", async () => {
+    const file = {
+      _id: "file",
+      storageId: "storage",
+      storageProvider: "convex",
+      virtualPath: null,
+    };
+    const runQuery = vi.fn(async (_query, args) => {
+      if ("virtualPath" in args) {
+        return null;
+      }
+      if (args.storageId === "storage") {
+        return file;
+      }
+      if (args.storageId === "existing") {
+        return {
+          _id: "other-file",
+          storageId: "existing",
+          storageProvider: "r2",
+          virtualPath: null,
+        };
+      }
+      return null;
+    });
+
+    const ctx = { runQuery } as any;
+
+    await expect(
+      getHandler(transferFile)(ctx, {
+        storageId: "storage",
+        targetProvider: "r2",
+        r2Config,
+        virtualPath: "existing",
+      }),
+    ).rejects.toThrow("Storage ID already exists.");
+  });
+
   test("transfers r2 source to convex target", async () => {
     const ctx = {
       runQuery: vi.fn(async () => ({

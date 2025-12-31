@@ -188,6 +188,17 @@ export const transferFile: RegisteredAction<
     const needsR2 = file.storageProvider === "r2" || args.targetProvider === "r2";
     const r2Config = needsR2 ? requireR2Config(args.r2Config, "R2 transfers") : null;
 
+    let plannedStorageId: string | null = null;
+    if (args.targetProvider === "r2") {
+      plannedStorageId = resolvedVirtualPath ?? file.virtualPath ?? crypto.randomUUID();
+      const existing = await ctx.runQuery(internal.transfer.getFileForTransfer, {
+        storageId: plannedStorageId,
+      });
+      if (existing && existing._id !== file._id) {
+        throw new ConvexError("Storage ID already exists.");
+      }
+    }
+
     let sourceUrl: string | null = null;
     if (file.storageProvider === "convex") {
       sourceUrl = await ctx.storage.getUrl(toStorageId(file.storageId));
@@ -213,8 +224,7 @@ export const transferFile: RegisteredAction<
     } else {
       const buffer = await response.arrayBuffer();
       const body = new Uint8Array(buffer);
-      newStorageId =
-        resolvedVirtualPath ?? file.virtualPath ?? crypto.randomUUID();
+      newStorageId = plannedStorageId ?? crypto.randomUUID();
       const r2 = createR2Client(r2Config!);
       await r2.send(
         new PutObjectCommand({
