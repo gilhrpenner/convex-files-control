@@ -501,11 +501,13 @@ Recommendation: schedule cleanup with a cron job in your app.
 From `src/component/transfer.ts`:
 
 Goal: move a file between Convex storage and R2 while preserving ACLs and grants.
+Optional: update the virtual path during the transfer.
 
 Transfer steps:
 
 1. Fetch file record (internal query).
-2. Verify provider change is necessary.
+2. Verify provider change is necessary, unless the caller is only updating
+   the virtual path.
 3. Create a signed source URL and `fetch` the file.
 4. Upload to the target provider:
    - Convex: `ctx.storage.store(blob)`
@@ -516,6 +518,14 @@ Transfer steps:
    - If a new virtual path is provided, update it on the file record.
    - Update all access keys + grants to the new storageId.
    - Delete the original storage object (with retry).
+
+Special cases:
+- If the target provider is the same and only the virtual path changes:
+  - Convex storage: updates metadata only (no data re-upload).
+  - R2: re-uploads the object to the new key and deletes the old one.
+- If a provided virtual path ends with `/`, the component tries to append the
+  existing filename (derived from the current virtual path or storageId). If
+  it cannot infer a name, it throws and asks for a full path.
 
 Limitation: the transfer flow downloads the entire file into memory before
 uploading, so it is not optimal for extremely large files.

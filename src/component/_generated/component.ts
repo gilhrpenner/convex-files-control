@@ -303,7 +303,11 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
           targetProvider: "convex" | "r2";
           virtualPath?: string;
         },
-        { storageId: string; storageProvider: "convex" | "r2" },
+        {
+          storageId: string;
+          storageProvider: "convex" | "r2";
+          virtualPath: string | null;
+        },
         Name
       >;
     };
