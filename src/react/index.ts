@@ -26,6 +26,7 @@ export type UploadFileArgs = {
   method?: UploadMethod;
   http?: HttpUploadOptions;
   provider?: StorageProvider;
+  virtualPath?: string;
 };
 
 export type UseUploadFileOptions = {
@@ -83,8 +84,13 @@ export function useUploadFile<Api extends UploadApi>(
     async (args: UploadFileArgs): Promise<UploadResult> => {
       const { file, expiresAt } = args;
       const provider = args.provider ?? options.provider ?? "convex";
+      type GenerateArgs = Parameters<typeof generateUploadUrl>[0];
+      const generateArgs = {
+        provider,
+        ...(args.virtualPath !== undefined ? { virtualPath: args.virtualPath } : {}),
+      } as GenerateArgs;
       const { uploadUrl, uploadToken, storageId: presetStorageId } =
-        await generateUploadUrl({ provider });
+        await generateUploadUrl(generateArgs);
       const uploadResponse = await fetch(uploadUrl, {
         method: provider === "r2" ? "PUT" : "POST",
         headers: {
@@ -109,12 +115,15 @@ export function useUploadFile<Api extends UploadApi>(
         throw new Error("Upload did not return a storageId.");
       }
 
-      return await finalizeUpload({
+      type FinalizeArgs = Parameters<typeof finalizeUpload>[0];
+      const finalizeArgs = {
         uploadToken,
         storageId,
         fileName: file.name,
         expiresAt,
-      });
+        ...(args.virtualPath !== undefined ? { virtualPath: args.virtualPath } : {}),
+      } as FinalizeArgs;
+      return await finalizeUpload(finalizeArgs);
     },
     [generateUploadUrl, finalizeUpload, options.provider],
   );
@@ -134,6 +143,9 @@ export function useUploadFile<Api extends UploadApi>(
       const formData = new FormData();
       formData.append(uploadFormFields.file, file);
       formData.append(uploadFormFields.provider, provider);
+      if (args.virtualPath !== undefined) {
+        formData.append(uploadFormFields.virtualPath, args.virtualPath);
+      }
       if (expiresAt !== undefined) {
         formData.append(
           uploadFormFields.expiresAt,

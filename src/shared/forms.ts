@@ -3,4 +3,5 @@ export const uploadFormFields = {
   accessKeys: "accessKeys",
   expiresAt: "expiresAt",
   provider: "provider",
+  virtualPath: "virtualPath",
 } as const;

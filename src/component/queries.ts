@@ -2,7 +2,11 @@ import { paginator } from "convex-helpers/server/pagination";
 import { paginationOptsValidator, paginationResultValidator } from "convex/server";
 import { v } from "convex/values";
 import { query } from "./_generated/server";
-import { hasAccessKey as hasAccessKeyForFile, normalizeAccessKey } from "./lib";
+import {
+  hasAccessKey as hasAccessKeyForFile,
+  normalizeAccessKey,
+  normalizeVirtualPath,
+} from "./lib";
 import schema from "./schema";
 import {
   downloadGrantSummaryValidator,
@@ -115,6 +119,44 @@ export const getFile = query({
     const file = await ctx.db
       .query("files")
       .withIndex("by_storageId", (q) => q.eq("storageId", args.storageId))
+      .first();
+
+    if (!file) {
+      return null;
+    }
+
+    return toFileSummary(file);
+  },
+});
+
+/**
+ * Fetch a file summary by virtual path.
+ *
+ * @param args.virtualPath - The file's virtual path.
+ * @returns The file summary or `null` if not found.
+ *
+ * @example
+ * ```ts
+ * const file = await ctx.runQuery(
+ *   components.convexFilesControl.queries.getFileByVirtualPath,
+ *   { virtualPath: "/tenant/123/report.pdf" },
+ * );
+ * ```
+ */
+export const getFileByVirtualPath = query({
+  args: {
+    virtualPath: v.string(),
+  },
+  returns: v.union(fileSummaryValidator, v.null()),
+  handler: async (ctx, args) => {
+    const virtualPath = normalizeVirtualPath(args.virtualPath);
+    if (!virtualPath) {
+      return null;
+    }
+
+    const file = await ctx.db
+      .query("files")
+      .withIndex("by_virtualPath", (q) => q.eq("virtualPath", virtualPath))
       .first();
 
     if (!file) {

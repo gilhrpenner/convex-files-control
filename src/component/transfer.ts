@@ -9,7 +9,12 @@ import {
 import type { Id } from "./_generated/dataModel";
 import { api, components, internal } from "./_generated/api";
 import { ActionRetrier } from "@convex-dev/action-retrier";
-import { toStorageId, findFileByStorageId } from "./lib";
+import {
+  findFileByStorageId,
+  findFileByVirtualPath,
+  normalizeVirtualPath,
+  toStorageId,
+} from "./lib";
 import { storageProviderValidator } from "./storageProvider";
 import {
   createR2Client,
@@ -25,12 +30,14 @@ type TransferFileRecord = {
   _id: Id<"files">;
   storageId: string;
   storageProvider: StorageProvider;
+  virtualPath: string | null;
 };
 
 type TransferFileArgs = {
   storageId: string;
   targetProvider: StorageProvider;
   r2Config?: R2Config;
+  virtualPath?: string;
 };
 
 type TransferResult = {
@@ -53,6 +60,7 @@ export const getFileForTransfer = internalQuery({
       _id: v.id("files"),
       storageId: v.string(),
       storageProvider: storageProviderValidator,
+      virtualPath: v.union(v.string(), v.null()),
     }),
     v.null(),
   ),
@@ -65,6 +73,34 @@ export const getFileForTransfer = internalQuery({
       _id: file._id,
       storageId: file.storageId,
       storageProvider: file.storageProvider,
+      virtualPath: file.virtualPath ?? null,
+    };
+  },
+});
+
+export const getFileByVirtualPathForTransfer = internalQuery({
+  args: {
+    virtualPath: v.string(),
+  },
+  returns: v.union(
+    v.object({
+      _id: v.id("files"),
+      storageId: v.string(),
+      storageProvider: storageProviderValidator,
+      virtualPath: v.union(v.string(), v.null()),
+    }),
+    v.null(),
+  ),
+  handler: async (ctx, args) => {
+    const file = await findFileByVirtualPath(ctx, args.virtualPath);
+    if (!file) {
+      return null;
+    }
+    return {
+      _id: file._id,
+      storageId: file.storageId,
+      storageProvider: file.storageProvider,
+      virtualPath: file.virtualPath ?? null,
     };
   },
 });
@@ -78,6 +114,7 @@ export const transferFile: RegisteredAction<
     storageId: v.string(),
     targetProvider: storageProviderValidator,
     r2Config: v.optional(r2ConfigValidator),
+    virtualPath: v.optional(v.string()),
   },
   returns: v.object({
     storageId: v.string(),
@@ -96,6 +133,23 @@ export const transferFile: RegisteredAction<
 
     if (file.storageProvider === args.targetProvider) {
       throw new ConvexError("File already stored in target provider.");
+    }
+
+    const requestedVirtualPath =
+      args.virtualPath === undefined
+        ? undefined
+        : normalizeVirtualPath(args.virtualPath);
+    if (args.virtualPath !== undefined && !requestedVirtualPath) {
+      throw new ConvexError("Virtual path cannot be empty.");
+    }
+
+    if (requestedVirtualPath) {
+      const existing = await ctx.runQuery(getFileByVirtualPathForTransfer, {
+        virtualPath: requestedVirtualPath,
+      });
+      if (existing && existing._id !== file._id) {
+        throw new ConvexError("Virtual path already exists.");
+      }
     }
 
     const needsR2 = file.storageProvider === "r2" || args.targetProvider === "r2";
@@ -126,7 +180,8 @@ export const transferFile: RegisteredAction<
     } else {
       const buffer = await response.arrayBuffer();
       const body = new Uint8Array(buffer);
-      newStorageId = crypto.randomUUID();
+      newStorageId =
+        requestedVirtualPath ?? file.virtualPath ?? crypto.randomUUID();
       const r2 = createR2Client(r2Config!);
       await r2.send(
         new PutObjectCommand({
@@ -144,6 +199,7 @@ export const transferFile: RegisteredAction<
       targetProvider: args.targetProvider,
       sourceProvider: file.storageProvider,
       r2Config: r2Config ?? undefined,
+      ...(requestedVirtualPath !== undefined ? { virtualPath: requestedVirtualPath } : {}),
     });
   },
 });
@@ -155,6 +211,7 @@ export const commitTransfer = internalMutation({
     targetProvider: storageProviderValidator,
     sourceProvider: storageProviderValidator,
     r2Config: v.optional(r2ConfigValidator),
+    virtualPath: v.optional(v.union(v.null(), v.string())),
   },
   returns: v.object({
     storageId: v.string(),
@@ -181,11 +238,21 @@ export const commitTransfer = internalMutation({
         .collect(),
     ]);
 
+    const updates: {
+      storageId: string;
+      storageProvider: StorageProvider;
+      virtualPath?: string | undefined;
+    } = {
+      storageId: args.newStorageId,
+      storageProvider: args.targetProvider,
+    };
+
+    if (args.virtualPath !== undefined) {
+      updates.virtualPath = args.virtualPath ?? undefined;
+    }
+
     await Promise.all([
-      ctx.db.patch(file._id, {
-        storageId: args.newStorageId,
-        storageProvider: args.targetProvider,
-      }),
+      ctx.db.patch(file._id, updates),
       ...accessRows.map((row) =>
         ctx.db.patch(row._id, { storageId: args.newStorageId }),
       ),

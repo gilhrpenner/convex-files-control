@@ -96,6 +96,9 @@ Repo-specific limitations and design choices:
   You must store those in your own app tables.
 - Access control is enforced by access keys. The component does not verify
   who the access key belongs to; your app does.
+- Virtual paths (if you use them) are globally unique within the component.
+  Multi-tenant apps should namespace paths at the app layer (e.g.,
+  `/tenant/<id>/...`).
 - The component supports Convex storage and Cloudflare R2 only.
 - File transfer and metadata computation may download the full file into
   memory (important for very large files).
@@ -209,8 +212,10 @@ Schema lives in `src/component/schema.ts`.
 - `storageId: string` (primary identifier for the storage object)
 - `storageProvider: "convex" | "r2"`
 - `expiresAt?: number`
+- `virtualPath?: string`
 - Indexes:
   - `by_storageId`
+  - `by_virtualPath`
   - `by_expiresAt`
 
 2) `fileAccess`
@@ -241,6 +246,7 @@ Schema lives in `src/component/schema.ts`.
 - `expiresAt: number`
 - `storageProvider: "convex" | "r2"`
 - `storageId?: string` (pre-generated for R2)
+- `virtualPath?: string`
 - Index:
   - `by_expiresAt`
 
@@ -261,6 +267,9 @@ Schema lives in `src/component/schema.ts`.
 - storageProvider: "convex" or "r2".
 - accessKey: An arbitrary string representing a user, tenant, or group. Used
   for access control. It is normalized (trim + non-empty).
+- virtualPath: Optional logical path for a file (e.g., `/tenant/123/avatar.png`).
+  This is a metadata-only path for Convex storage and can be used as the real
+  object key for R2. Paths are globally unique within the component.
 - downloadGrant: A short-lived token that grants download access under
   configured constraints (max uses, expiration, optional password).
 - pendingUpload: A token created at upload initiation, ensuring the file is
@@ -301,16 +310,26 @@ Key details from implementation (`src/component/upload.ts`):
   - Creates a `pendingUploads` record with TTL = 1 hour
     (`PENDING_UPLOAD_TTL_MS`).
   - For Convex provider: uses `ctx.storage.generateUploadUrl()`.
-  - For R2 provider: generates a UUID storageId and presigned PUT URL.
+  - For R2 provider: uses `virtualPath` as the object key when provided;
+    otherwise generates a UUID storageId and presigned PUT URL.
+  - Stores `virtualPath` on the pending upload if supplied.
 - `finalizeUpload`:
   - Validates the pending upload exists and is not expired.
   - Validates storageId matches the pending upload if preset (R2).
+  - Applies `virtualPath` from the finalize call or pending upload record.
   - Calls `registerFileCore`, then deletes the pendingUpload record.
 - `registerFileCore`:
   - Requires at least one normalized access key.
   - Validates expiration is in the future (or null).
+  - Rejects duplicate `virtualPath` values (global uniqueness).
   - For Convex: reads system storage metadata if not provided.
   - For R2: metadata must be provided or computed separately.
+
+Note: To make R2 store the object at the virtual path, you must provide
+`virtualPath` during upload URL generation (or via the HTTP upload route),
+so the presigned URL uses that key. Supplying `virtualPath` only at
+finalize time will store the path in metadata but keep the underlying R2 key
+as whatever was used during upload.
 
 ### 2.6.2 HTTP upload route flow (optional)
 
@@ -346,6 +365,7 @@ Important HTTP upload rules:
   - `file` (required)
   - `provider` (optional)
   - `expiresAt` (optional: timestamp or "null")
+  - `virtualPath` (optional: trimmed non-empty string)
 - Access keys are not accepted via the form. They must come from the
   `checkUploadRequest` hook.
 - When provider is R2, server requires R2 config from env or options.
@@ -444,6 +464,7 @@ From `src/component/queries.ts`:
 - `listFilesPage(paginationOpts)`
 - `listFilesByAccessKeyPage(accessKey, paginationOpts)`
 - `getFile({ storageId })`
+- `getFileByVirtualPath({ virtualPath })`
 - `listAccessKeysPage(storageId, paginationOpts)`
 - `listDownloadGrantsPage(paginationOpts)`
 - `hasAccessKey(storageId, accessKey)`
@@ -488,9 +509,11 @@ Transfer steps:
 3. Create a signed source URL and `fetch` the file.
 4. Upload to the target provider:
    - Convex: `ctx.storage.store(blob)`
-   - R2: `PutObjectCommand` with a new UUID key
+   - R2: `PutObjectCommand` with `virtualPath` as the key when present,
+     otherwise a new UUID key
 5. Commit transfer:
    - Update file record storageId + provider.
+   - If a new virtual path is provided, update it on the file record.
    - Update all access keys + grants to the new storageId.
    - Delete the original storage object (with retry).
 
@@ -591,7 +614,8 @@ buildDownloadUrl({
 - `cleanupExpired`
 - `computeR2Metadata`
 - `transferFile`
-- `getFile`, `listFilesPage`, `listFilesByAccessKeyPage`, `listAccessKeysPage`,
+- `getFile`, `getFileByVirtualPath`, `listFilesPage`,
+  `listFilesByAccessKeyPage`, `listAccessKeysPage`,
   `listDownloadGrantsPage`, `hasAccessKey`
 
 It also exposes `clientApi()` which generates a ready-to-export API surface
@@ -605,6 +629,7 @@ Hooks you can pass to `clientApi()`:
 - `checkDownloadConsume`
 - `checkMaintenance`
 - `checkReadFile`, `checkReadAccessKey`, `checkListFiles`
+- `checkReadVirtualPath`
 - `checkListDownloadGrants`
 - `onUpload`, `onDelete`, `onAccessKeyAdded`, `onAccessKeyRemoved`
 - `onDownloadGrantCreated`, `onDownloadConsumed`, `onExpirationUpdated`
@@ -658,29 +683,35 @@ Important details:
    - Duplicate access keys are deduplicated.
    - Last access key cannot be removed from a file.
 
-2) Upload tokens
+2) Virtual paths
+   - Optional and globally unique across the component.
+   - Best practice: namespace by tenant/user in your app (e.g., `/tenant/<id>/...`).
+   - Keep normalization simple (trim only); avoid `..` and ambiguous paths in app logic.
+   - Uniqueness is enforced at write time but is not race-proof under concurrent uploads.
+
+3) Upload tokens
    - Expire after 1 hour (`PENDING_UPLOAD_TTL_MS`).
    - Finalize fails if token missing or expired.
 
-3) File expiration
+4) File expiration
    - `expiresAt` must be in the future.
    - If a file expires, download consumption schedules deletion and returns
      `file_expired`.
 
-4) R2 metadata
+5) R2 metadata
    - For R2 uploads, metadata is not available from Convex system tables.
    - The HTTP route computes metadata by hashing the file.
    - `computeR2Metadata` downloads the entire object, which is expensive for
      large files.
 
-5) Transfer size
+6) Transfer size
    - Transfers buffer the entire file in memory.
 
-6) Shareable links vs. access keys
+7) Shareable links vs. access keys
    - If `shareableLink` is true, the component does not require access keys.
    - The HTTP route can override this with `requireAccessKey: true`.
 
-7) Password handling
+8) Password handling
    - Passwords are hashed; only verification is supported.
    - Avoid passing passwords in query params; prefer headers.
 

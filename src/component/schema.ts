@@ -7,8 +7,10 @@ export default defineSchema({
     storageId: v.string(),
     storageProvider: storageProviderValidator,
     expiresAt: v.optional(v.number()),
+    virtualPath: v.optional(v.string()),
   })
     .index("by_storageId", ["storageId"])
+    .index("by_virtualPath", ["virtualPath"])
     .index("by_expiresAt", ["expiresAt"]),
 
   fileAccess: defineTable({
@@ -38,5 +40,6 @@ export default defineSchema({
     expiresAt: v.number(),
     storageProvider: storageProviderValidator,
     storageId: v.optional(v.string()),
+    virtualPath: v.optional(v.string()),
   }).index("by_expiresAt", ["expiresAt"]),
 });

@@ -46,6 +46,7 @@ describe("getFileForTransfer", () => {
       _id: "file-id",
       storageId: "storage",
       storageProvider: "convex",
+      virtualPath: null,
     };
     const ctx = {
       db: {
