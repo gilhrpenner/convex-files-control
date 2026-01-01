@@ -313,12 +313,24 @@ export function registerRoutes(
           formData.get(uploadFormFields.provider),
           defaultUploadProvider,
         );
+        const virtualPathEntry = formData.get(uploadFormFields.virtualPath);
+        if (virtualPathEntry !== null && typeof virtualPathEntry !== "string") {
+          return jsonError("'virtualPath' must be a string", 400, origin);
+        }
+        const virtualPath =
+          typeof virtualPathEntry === "string"
+            ? virtualPathEntry.trim()
+            : undefined;
+        if (virtualPath !== undefined && virtualPath === "") {
+          return jsonError("'virtualPath' cannot be empty", 400, origin);
+        }
 
         // Call the auth hook to get access keys
         const hookResult = await checkUploadRequest(ctx, {
           file,
           expiresAt: expiresAt ?? undefined,
           provider,
+          virtualPath,
           request,
         });
 
@@ -353,6 +365,7 @@ export function registerRoutes(
           await ctx.runMutation(component.upload.generateUploadUrl, {
             provider,
             r2Config,
+            virtualPath,
           });
 
         const uploadResponse = await fetch(uploadUrl, {
@@ -396,6 +409,7 @@ export function registerRoutes(
           accessKeys,
           expiresAt: expiresAt ?? undefined,
           metadata,
+          virtualPath,
         });
 
         if (onUploadComplete) {
@@ -404,6 +418,7 @@ export function registerRoutes(
             provider,
             accessKeys,
             expiresAt: expiresAt ?? null,
+            virtualPath: virtualPath ?? null,
             formData,
             result,
           });
@@ -577,11 +592,13 @@ const toFileSummary = (file: {
   storageId: string;
   storageProvider: StorageProvider;
   expiresAt: number | null;
+  virtualPath: string | null;
 }) => ({
   _id: asFileId(file._id),
   storageId: file.storageId,
   storageProvider: file.storageProvider,
   expiresAt: file.expiresAt,
+  virtualPath: file.virtualPath,
 });
 
 const toDownloadGrantSummary = (grant: {
@@ -636,6 +653,7 @@ type FinalizeUploadArgs = {
     sha256: string;
     contentType: string | null;
   };
+  virtualPath?: string;
 };
 
 type RegisterFileArgs = {
@@ -648,6 +666,7 @@ type RegisterFileArgs = {
     sha256: string;
     contentType: string | null;
   };
+  virtualPath?: string;
 };
 
 type DownloadGrantArgs = {
@@ -668,6 +687,7 @@ export type UploadRequestArgs = {
   file: Blob;
   expiresAt?: number;
   provider: StorageProvider;
+  virtualPath?: string;
   request: Request;
 };
 
@@ -680,6 +700,7 @@ export type UploadCompleteArgs = {
   provider: StorageProvider;
   accessKeys: string[];
   expiresAt: number | null;
+  virtualPath?: string | null;
   formData: FormData;
   result: UploadResult;
 };
@@ -720,6 +741,10 @@ export type FilesControlHooks<DataModel extends GenericDataModel> = {
   checkReadFile?: (
     ctx: GenericQueryCtx<DataModel>,
     storageId: string,
+  ) => void | Promise<void>;
+  checkReadVirtualPath?: (
+    ctx: GenericQueryCtx<DataModel>,
+    virtualPath: string,
   ) => void | Promise<void>;
   checkReadAccessKey?: (
     ctx: GenericQueryCtx<DataModel>,
@@ -812,7 +837,7 @@ export class FilesControl {
 
   async generateUploadUrl(
     ctx: RunMutationCtx,
-    args: { provider?: StorageProvider; r2Config?: R2Config } = {},
+    args: { provider?: StorageProvider; r2Config?: R2Config; virtualPath?: string } = {},
   ) {
     const provider = args.provider ?? "convex";
     const r2Config =
@@ -822,6 +847,7 @@ export class FilesControl {
     return ctx.runMutation(this.component.upload.generateUploadUrl, {
       provider,
       r2Config,
+      virtualPath: args.virtualPath,
     });
   }
 
@@ -896,7 +922,12 @@ export class FilesControl {
 
   async transferFile(
     ctx: RunActionCtx,
-    args: { storageId: string; targetProvider: StorageProvider; r2Config?: R2Config },
+    args: {
+      storageId: string;
+      targetProvider: StorageProvider;
+      r2Config?: R2Config;
+      virtualPath?: string;
+    },
   ) {
     const r2Config =
       args.targetProvider === "r2"
@@ -906,11 +937,16 @@ export class FilesControl {
       storageId: args.storageId,
       targetProvider: args.targetProvider,
       r2Config,
+      virtualPath: args.virtualPath,
     });
   }
 
   async getFile(ctx: RunQueryCtx, args: { storageId: string }) {
     return ctx.runQuery(this.component.queries.getFile, args);
+  }
+
+  async getFileByVirtualPath(ctx: RunQueryCtx, args: { virtualPath: string }) {
+    return ctx.runQuery(this.component.queries.getFileByVirtualPath, args);
   }
 
   async listFilesPage(
@@ -955,6 +991,7 @@ export class FilesControl {
       generateUploadUrl: mutationGeneric({
         args: {
           provider: storageProviderValidator,
+          virtualPath: v.optional(v.string()),
         },
         returns: v.object({
           uploadUrl: v.string(),
@@ -970,6 +1007,7 @@ export class FilesControl {
 
           const result = await this.generateUploadUrl(ctx, {
             provider: args.provider,
+            virtualPath: args.virtualPath,
           });
           return {
             ...result,
@@ -984,12 +1022,14 @@ export class FilesControl {
           accessKeys: v.array(v.string()),
           expiresAt: v.optional(v.union(v.null(), v.number())),
           metadata: v.optional(fileMetadataInputValidator),
+          virtualPath: v.optional(v.string()),
         },
         returns: v.object({
           storageId: v.string(),
           storageProvider: storageProviderValidator,
           expiresAt: v.union(v.null(), v.number()),
           metadata: v.union(fileMetadataValidator, v.null()),
+          virtualPath: v.union(v.string(), v.null()),
         }),
         handler: async (ctx, args) => {
           if (opts.checkUpload) {
@@ -1027,12 +1067,14 @@ export class FilesControl {
           accessKeys: v.array(v.string()),
           expiresAt: v.optional(v.union(v.null(), v.number())),
           metadata: v.optional(fileMetadataInputValidator),
+          virtualPath: v.optional(v.string()),
         },
         returns: v.object({
           storageId: v.string(),
           storageProvider: storageProviderValidator,
           expiresAt: v.union(v.null(), v.number()),
           metadata: v.union(fileMetadataValidator, v.null()),
+          virtualPath: v.union(v.string(), v.null()),
         }),
         handler: async (ctx, args) => {
           if (opts.checkUpload) {
@@ -1244,6 +1286,20 @@ export class FilesControl {
           }
 
           const result = await this.getFile(ctx, args);
+          return result ? toFileSummary(result) : null;
+        },
+      }),
+      getFileByVirtualPath: queryGeneric({
+        args: {
+          virtualPath: v.string(),
+        },
+        returns: v.union(fileSummaryValidator, v.null()),
+        handler: async (ctx, args) => {
+          if (opts.checkReadVirtualPath) {
+            await opts.checkReadVirtualPath(ctx, args.virtualPath);
+          }
+
+          const result = await this.getFileByVirtualPath(ctx, args);
           return result ? toFileSummary(result) : null;
         },
       }),

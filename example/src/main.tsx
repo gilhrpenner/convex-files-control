@@ -7,7 +7,14 @@ import "./index.css";
 import App from "./App.tsx";
 import { DownloadPage } from "./pages/DownloadPage.tsx";
 
-const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
+const convexUrl = import.meta.env.VITE_CONVEX_URL || "https://intent-tiger-143.convex.cloud";
+
+if (!convexUrl || typeof convexUrl !== "string" || convexUrl.trim() === "") {
+  console.error("VITE_CONVEX_URL is not set or invalid:", convexUrl);
+  throw new Error("VITE_CONVEX_URL is required. Please set it in your environment variables.");
+}
+
+const convex = new ConvexReactClient(convexUrl);
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

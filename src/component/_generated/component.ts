@@ -154,6 +154,20 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
           expiresAt: number | null;
           storageId: string;
           storageProvider: "convex" | "r2";
+          virtualPath: string | null;
+        } | null,
+        Name
+      >;
+      getFileByVirtualPath: FunctionReference<
+        "query",
+        "internal",
+        { virtualPath: string },
+        {
+          _id: string;
+          expiresAt: number | null;
+          storageId: string;
+          storageProvider: "convex" | "r2";
+          virtualPath: string | null;
         } | null,
         Name
       >;
@@ -238,6 +252,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             expiresAt: number | null;
             storageId: string;
             storageProvider: "convex" | "r2";
+            virtualPath: string | null;
           }>;
           pageStatus?: "SplitRecommended" | "SplitRequired" | null;
           splitCursor?: string | null;
@@ -265,6 +280,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             expiresAt: number | null;
             storageId: string;
             storageProvider: "convex" | "r2";
+            virtualPath: string | null;
           }>;
           pageStatus?: "SplitRecommended" | "SplitRequired" | null;
           splitCursor?: string | null;
@@ -285,8 +301,13 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
           };
           storageId: string;
           targetProvider: "convex" | "r2";
+          virtualPath?: string;
         },
-        { storageId: string; storageProvider: "convex" | "r2" },
+        {
+          storageId: string;
+          storageProvider: "convex" | "r2";
+          virtualPath: string | null;
+        },
         Name
       >;
     };
@@ -324,6 +345,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
           };
           storageId: string;
           uploadToken: string;
+          virtualPath?: string;
         },
         {
           expiresAt: null | number;
@@ -335,6 +357,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
           } | null;
           storageId: string;
           storageProvider: "convex" | "r2";
+          virtualPath: string | null;
         },
         Name
       >;
@@ -349,6 +372,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             bucketName: string;
             secretAccessKey: string;
           };
+          virtualPath?: string;
         },
         {
           storageId: string | null;
@@ -372,6 +396,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
           };
           storageId: string;
           storageProvider: "convex" | "r2";
+          virtualPath?: string;
         },
         {
           expiresAt: null | number;
@@ -383,6 +408,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
           } | null;
           storageId: string;
           storageProvider: "convex" | "r2";
+          virtualPath: string | null;
         },
         Name
       >;

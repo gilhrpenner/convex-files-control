@@ -1080,6 +1080,7 @@ describe("helpers", () => {
       accessKeys: "accessKeys",
       expiresAt: "expiresAt",
       provider: "provider",
+      virtualPath: "virtualPath",
     });
   });
 });

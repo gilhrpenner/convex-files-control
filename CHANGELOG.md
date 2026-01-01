@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.4.0 (2025-12-31)
+
+### Features
+
+- **files**: Add optional `virtualPath` for globally unique, logical file paths,
+  with indexing and a new `getFileByVirtualPath` query.
+- **upload**: Allow specifying `virtualPath` during upload initialization and
+  finalization, using it as the R2 object key when provided.
+- **transfer**: Allow updating a file's virtual path without changing its
+  storage provider; optimize Convex storage transfers to metadata-only updates
+  and infer filenames for virtual paths ending in `/`.
+- **access**: Add a `checkReadVirtualPath` hook for virtual path access control.
+
+---
+
 ## 0.3.0 (2025-12-31)
 
 ### Breaking Changes

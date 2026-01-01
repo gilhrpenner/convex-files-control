@@ -35,6 +35,7 @@ export const fileSummaryValidator = v.object({
   storageId: v.string(),
   storageProvider: storageProviderValidator,
   expiresAt: v.union(v.number(), v.null()),
+  virtualPath: v.union(v.string(), v.null()),
 });
 
 export const downloadGrantSummaryValidator = v.object({
@@ -51,6 +52,7 @@ export type FileSummary = {
   storageId: string;
   storageProvider: "convex" | "r2";
   expiresAt: number | null;
+  virtualPath: string | null;
 };
 
 export type DownloadGrantSummary = {
@@ -68,6 +70,7 @@ export function toFileSummary(file: Doc<"files">): FileSummary {
     storageId: file.storageId,
     storageProvider: file.storageProvider,
     expiresAt: file.expiresAt ?? null,
+    virtualPath: file.virtualPath ?? null,
   };
 }
 

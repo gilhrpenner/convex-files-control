@@ -19,6 +19,7 @@ export type UploadResult = {
   storageProvider: StorageProvider;
   expiresAt: number | null;
   metadata: UploadMetadata | null;
+  virtualPath?: string | null;
 };
 
 export function isStorageProvider(

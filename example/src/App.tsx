@@ -7,6 +7,7 @@ import { ShareDialog } from "@/components/ShareDialog";
 import { FileDropzone, type FileItem } from "@/components/FileDropzone";
 import { ExpirationDateInput } from "@/components/ExpirationDateInput";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -47,6 +48,7 @@ function App() {
   const [provider, setProvider] = React.useState<StorageProvider>("convex");
   const [method, setMethod] = React.useState<"presigned" | "http">("presigned");
   const [expiresAt, setExpiresAt] = React.useState<Date | null>(null);
+  const [virtualPath, setVirtualPath] = React.useState("");
   const [isUploading, setIsUploading] = React.useState(false);
 
   const authToken = useAuthToken();
@@ -58,7 +60,7 @@ function App() {
   const getFileDownloadUrl = useMutation(api.files.getFileDownloadUrl);
 
   const convexSiteUrl = React.useMemo(
-    () => import.meta.env.VITE_CONVEX_URL.replace(".cloud", ".site"),
+    () => (import.meta.env.VITE_CONVEX_URL || "https://intent-tiger-143.convex.cloud").replace(".cloud", ".site"),
     [],
   );
 
@@ -75,6 +77,18 @@ function App() {
     : fileCount > 1
       ? "Upload files"
       : "Upload file";
+
+  const resolveVirtualPath = React.useCallback(
+    (fileName: string) => {
+      const trimmed = virtualPath.trim();
+      if (!trimmed) return undefined;
+      if (files.length > 1 || trimmed.endsWith("/")) {
+        return `${trimmed.replace(/\/+$/g, "")}/${fileName}`;
+      }
+      return trimmed;
+    },
+    [files.length, virtualPath],
+  );
 
   const handleUpload = async () => {
     if (files.length === 0) return;
@@ -100,12 +114,14 @@ function App() {
           fileItem.name,
           { type: fileItem.file.type }
         );
+        const resolvedVirtualPath = resolveVirtualPath(fileWithCustomName.name);
         
         await uploadFile({
           file: fileWithCustomName,
           expiresAt: expiresAt?.getTime() ?? null,
           method,
           provider,
+          virtualPath: resolvedVirtualPath,
         });
       }
       setFiles([]);
@@ -214,6 +230,19 @@ function App() {
 
             <section className="space-y-6">
               <ExpirationDateInput onDateChange={setExpiresAt} />
+              <div className="space-y-2">
+                <Label htmlFor="virtual-path">Virtual path (optional)</Label>
+                <Input
+                  id="virtual-path"
+                  placeholder="/tenant/123/uploads/ or /tenant/123/report.pdf"
+                  value={virtualPath}
+                  onChange={(e) => setVirtualPath(e.target.value)}
+                  className="bg-white/5 border-white/10"
+                />
+                <p className="text-xs text-muted-foreground">
+                  If you upload multiple files, this is treated as a folder and the file name is appended.
+                </p>
+              </div>
 
               <Button
                 className="w-full py-6 text-base font-semibold shadow-lg shadow-primary/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
@@ -277,6 +306,7 @@ function App() {
                     <TableHeader>
                     <TableRow>
                       <TableHead>File name</TableHead>
+                      <TableHead>Virtual path</TableHead>
                       <TableHead>Provider</TableHead>
                       <TableHead>Size</TableHead>
                       <TableHead>Expires</TableHead>
@@ -288,6 +318,9 @@ function App() {
                       <TableRow key={upload._id}>
                         <TableCell className="font-medium">
                           {upload.fileName}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground max-w-[220px] truncate">
+                          {upload.virtualPath ?? "-"}
                         </TableCell>
                         <TableCell>
                           <span className="inline-flex items-center gap-1.5">

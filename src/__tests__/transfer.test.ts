@@ -46,6 +46,7 @@ describe("getFileForTransfer", () => {
       _id: "file-id",
       storageId: "storage",
       storageProvider: "convex",
+      virtualPath: null,
     };
     const ctx = {
       db: {
@@ -155,6 +156,43 @@ describe("transferFile", () => {
     ).rejects.toThrow("File not found.");
   });
 
+  test("throws when target storageId already exists", async () => {
+    const file = {
+      _id: "file",
+      storageId: "storage",
+      storageProvider: "convex",
+      virtualPath: null,
+    };
+    const runQuery = vi.fn(async (_query, args) => {
+      if ("virtualPath" in args) {
+        return null;
+      }
+      if (args.storageId === "storage") {
+        return file;
+      }
+      if (args.storageId === "existing") {
+        return {
+          _id: "other-file",
+          storageId: "existing",
+          storageProvider: "r2",
+          virtualPath: null,
+        };
+      }
+      return null;
+    });
+
+    const ctx = { runQuery } as any;
+
+    await expect(
+      getHandler(transferFile)(ctx, {
+        storageId: "storage",
+        targetProvider: "r2",
+        r2Config,
+        virtualPath: "existing",
+      }),
+    ).rejects.toThrow("Storage ID already exists.");
+  });
+
   test("transfers r2 source to convex target", async () => {
     const ctx = {
       runQuery: vi.fn(async () => ({
@@ -165,6 +203,7 @@ describe("transferFile", () => {
       runMutation: vi.fn(async () => ({
         storageId: "new-storage",
         storageProvider: "convex",
+        virtualPath: null,
       })),
       storage: {
         store: vi.fn(async () => "new-storage"),
@@ -194,6 +233,7 @@ describe("transferFile", () => {
     expect(result).toEqual({
       storageId: "new-storage",
       storageProvider: "convex",
+      virtualPath: null,
     });
     expect(ctx.runMutation).toHaveBeenCalled();
   });
@@ -209,6 +249,7 @@ describe("transferFile", () => {
       runMutation: vi.fn(async () => ({
         storageId: "new-storage",
         storageProvider: "convex",
+        virtualPath: null,
       })),
       storage: {
         getUrl,
@@ -257,6 +298,7 @@ describe("transferFile", () => {
       runMutation: vi.fn(async () => ({
         storageId: "r2-id",
         storageProvider: "r2",
+        virtualPath: null,
       })),
       storage: {
         getUrl: vi.fn(async () => "https://convex.example.com"),
@@ -320,6 +362,7 @@ describe("transferFile", () => {
       runMutation: vi.fn(async () => ({
         storageId: "new",
         storageProvider: "convex",
+        virtualPath: null,
       })),
       storage: {
         getUrl: vi.fn(async () => "https://source.example.com"),
@@ -342,10 +385,10 @@ describe("transferFile", () => {
       targetProvider: "convex",
     });
 
-    expect(ctx.runMutation).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ r2Config: undefined }),
-    );
+    const r2ConfigArgs = ctx.runMutation.mock.calls
+      .map((call) => call[1])
+      .find((value) => value && typeof value === "object" && "r2Config" in value);
+    expect(r2ConfigArgs?.r2Config).toBeUndefined();
   });
 });
 

@@ -2,7 +2,9 @@ import { ConvexError, v } from "convex/values";
 import { action, mutation, type MutationCtx } from "./_generated/server";
 import {
   findFileByStorageId,
+  findFileByVirtualPath,
   normalizeAccessKeys,
+  normalizeVirtualPath,
   toStorageId,
 } from "./lib";
 import { PENDING_UPLOAD_TTL_MS } from "./constants";
@@ -35,6 +37,7 @@ export const generateUploadUrl = mutation({
   args: {
     provider: storageProviderValidator,
     r2Config: v.optional(r2ConfigValidator),
+    virtualPath: v.optional(v.string()),
   },
   returns: v.object({
     uploadUrl: v.string(),
@@ -48,12 +51,23 @@ export const generateUploadUrl = mutation({
 
     let uploadUrl: string;
     let storageId: string | null = null;
+    const virtualPath = normalizeVirtualPath(args.virtualPath);
+    if (args.virtualPath !== undefined && !virtualPath) {
+      throw new ConvexError("Virtual path cannot be empty.");
+    }
+
+    if (virtualPath) {
+      const existing = await findFileByVirtualPath(ctx, virtualPath);
+      if (existing) {
+        throw new ConvexError("Virtual path already exists.");
+      }
+    }
 
     if (args.provider === "convex") {
       uploadUrl = await ctx.storage.generateUploadUrl();
     } else {
       const r2Config = requireR2Config(args.r2Config, "R2 uploads");
-      storageId = crypto.randomUUID();
+      storageId = virtualPath ?? crypto.randomUUID();
       uploadUrl = await getR2UploadUrl(r2Config, storageId);
     }
 
@@ -61,6 +75,7 @@ export const generateUploadUrl = mutation({
       expiresAt: uploadTokenExpiresAt,
       storageProvider: args.provider,
       storageId: storageId ?? undefined,
+      virtualPath: virtualPath ?? undefined,
     });
 
     return {
@@ -100,12 +115,14 @@ export const finalizeUpload = mutation({
     accessKeys: v.array(v.string()),
     expiresAt: v.optional(v.union(v.null(), v.number())),
     metadata: v.optional(fileMetadataInputValidator),
+    virtualPath: v.optional(v.string()),
   },
   returns: v.object({
     storageId: v.string(),
     storageProvider: storageProviderValidator,
     expiresAt: v.union(v.null(), v.number()),
     metadata: v.union(fileMetadataValidator, v.null()),
+    virtualPath: v.union(v.string(), v.null()),
   }),
   handler: async (ctx, args) => {
     const pendingUpload = await ctx.db.get("pendingUploads", args.uploadToken);
@@ -124,10 +141,20 @@ export const finalizeUpload = mutation({
       throw new ConvexError("Storage ID does not match pending upload.");
     }
 
+    const normalizedVirtualPath = normalizeVirtualPath(args.virtualPath);
+    if (args.virtualPath !== undefined && !normalizedVirtualPath) {
+      throw new ConvexError("Virtual path cannot be empty.");
+    }
+    const pendingVirtualPath = normalizeVirtualPath(pendingUpload.virtualPath);
+    if (pendingVirtualPath && normalizedVirtualPath && pendingVirtualPath !== normalizedVirtualPath) {
+      throw new ConvexError("Virtual path does not match pending upload.");
+    }
+
     const [result] = await Promise.all([
       registerFileCore(ctx, {
         ...args,
         storageProvider: pendingUpload.storageProvider,
+        virtualPath: normalizedVirtualPath ?? pendingVirtualPath ?? undefined,
       }),
       ctx.db.delete(args.uploadToken),
     ]);
@@ -166,12 +193,14 @@ export const registerFile = mutation({
     accessKeys: v.array(v.string()),
     expiresAt: v.optional(v.union(v.null(), v.number())),
     metadata: v.optional(fileMetadataInputValidator),
+    virtualPath: v.optional(v.string()),
   },
   returns: v.object({
     storageId: v.string(),
     storageProvider: storageProviderValidator,
     expiresAt: v.union(v.null(), v.number()),
     metadata: v.union(fileMetadataValidator, v.null()),
+    virtualPath: v.union(v.string(), v.null()),
   }),
   handler: async (ctx, args) => {
     return registerFileCore(ctx, { ...args });
@@ -190,6 +219,7 @@ async function registerFileCore(
       sha256: string;
       contentType: string | null;
     };
+    virtualPath?: string;
   },
 ) {
   const accessKeys = normalizeAccessKeys(args.accessKeys);
@@ -201,15 +231,25 @@ async function registerFileCore(
     throw new ConvexError("Expiration must be in the future.");
   }
 
-  const [existingRegistration, systemFile] = await Promise.all([
+  const virtualPath = normalizeVirtualPath(args.virtualPath);
+  if (args.virtualPath !== undefined && !virtualPath) {
+    throw new ConvexError("Virtual path cannot be empty.");
+  }
+
+  const [existingRegistration, systemFile, existingVirtualPath] = await Promise.all([
     findFileByStorageId(ctx, args.storageId),
     args.metadata || args.storageProvider !== "convex"
       ? null
       : ctx.db.system.get(toStorageId(args.storageId)),
+    virtualPath ? findFileByVirtualPath(ctx, virtualPath) : Promise.resolve(null),
   ]);
 
   if (existingRegistration) {
     throw new ConvexError("File already registered.");
+  }
+
+  if (existingVirtualPath) {
+    throw new ConvexError("Virtual path already exists.");
   }
 
   const metadata =
@@ -223,6 +263,7 @@ async function registerFileCore(
     storageId: args.storageId,
     storageProvider: args.storageProvider,
     expiresAt: args.expiresAt ?? undefined,
+    virtualPath: virtualPath ?? undefined,
   });
 
   await Promise.all(
@@ -239,6 +280,7 @@ async function registerFileCore(
     storageId: args.storageId,
     storageProvider: args.storageProvider,
     expiresAt: args.expiresAt ?? null,
+    virtualPath: virtualPath ?? null,
     metadata: metadata
       ? {
           storageId: args.storageId,

@@ -9,7 +9,12 @@ import {
 import type { Id } from "./_generated/dataModel";
 import { api, components, internal } from "./_generated/api";
 import { ActionRetrier } from "@convex-dev/action-retrier";
-import { toStorageId, findFileByStorageId } from "./lib";
+import {
+  findFileByStorageId,
+  findFileByVirtualPath,
+  normalizeVirtualPath,
+  toStorageId,
+} from "./lib";
 import { storageProviderValidator } from "./storageProvider";
 import {
   createR2Client,
@@ -25,17 +30,20 @@ type TransferFileRecord = {
   _id: Id<"files">;
   storageId: string;
   storageProvider: StorageProvider;
+  virtualPath: string | null;
 };
 
 type TransferFileArgs = {
   storageId: string;
   targetProvider: StorageProvider;
   r2Config?: R2Config;
+  virtualPath?: string;
 };
 
 type TransferResult = {
   storageId: string;
   storageProvider: StorageProvider;
+  virtualPath: string | null;
 };
 
 const retrier = new ActionRetrier(components.actionRetrier);
@@ -53,6 +61,7 @@ export const getFileForTransfer = internalQuery({
       _id: v.id("files"),
       storageId: v.string(),
       storageProvider: storageProviderValidator,
+      virtualPath: v.union(v.string(), v.null()),
     }),
     v.null(),
   ),
@@ -65,6 +74,34 @@ export const getFileForTransfer = internalQuery({
       _id: file._id,
       storageId: file.storageId,
       storageProvider: file.storageProvider,
+      virtualPath: file.virtualPath ?? null,
+    };
+  },
+});
+
+export const getFileByVirtualPathForTransfer = internalQuery({
+  args: {
+    virtualPath: v.string(),
+  },
+  returns: v.union(
+    v.object({
+      _id: v.id("files"),
+      storageId: v.string(),
+      storageProvider: storageProviderValidator,
+      virtualPath: v.union(v.string(), v.null()),
+    }),
+    v.null(),
+  ),
+  handler: async (ctx, args) => {
+    const file = await findFileByVirtualPath(ctx, args.virtualPath);
+    if (!file) {
+      return null;
+    }
+    return {
+      _id: file._id,
+      storageId: file.storageId,
+      storageProvider: file.storageProvider,
+      virtualPath: file.virtualPath ?? null,
     };
   },
 });
@@ -78,10 +115,12 @@ export const transferFile: RegisteredAction<
     storageId: v.string(),
     targetProvider: storageProviderValidator,
     r2Config: v.optional(r2ConfigValidator),
+    virtualPath: v.optional(v.string()),
   },
   returns: v.object({
     storageId: v.string(),
     storageProvider: storageProviderValidator,
+    virtualPath: v.union(v.string(), v.null()),
   }),
   handler: async (ctx, args): Promise<TransferResult> => {
     const file: TransferFileRecord | null = await ctx.runQuery(
@@ -94,12 +133,71 @@ export const transferFile: RegisteredAction<
       throw new ConvexError("File not found.");
     }
 
-    if (file.storageProvider === args.targetProvider) {
+    const requestedVirtualPath =
+      args.virtualPath === undefined
+        ? undefined
+        : normalizeVirtualPath(args.virtualPath);
+    if (args.virtualPath !== undefined && !requestedVirtualPath) {
+      throw new ConvexError("Virtual path cannot be empty.");
+    }
+
+    let resolvedVirtualPath = requestedVirtualPath;
+    if (resolvedVirtualPath && resolvedVirtualPath.endsWith("/")) {
+      const base = resolvedVirtualPath.replace(/\/+$/g, "");
+      const inferredName =
+        basenameFromPath(file.virtualPath) ?? basenameFromPath(file.storageId);
+      if (!inferredName) {
+        throw new ConvexError(
+          "Virtual path ends with '/' but filename could not be inferred. Provide a full path.",
+        );
+      }
+      resolvedVirtualPath = `${base}/${inferredName}`;
+    }
+
+    if (resolvedVirtualPath) {
+      const existing = await ctx.runQuery(internal.transfer.getFileByVirtualPathForTransfer, {
+        virtualPath: resolvedVirtualPath,
+      });
+      if (existing && existing._id !== file._id) {
+        throw new ConvexError("Virtual path already exists.");
+      }
+    }
+
+    if (
+      file.storageProvider === args.targetProvider &&
+      (!resolvedVirtualPath || resolvedVirtualPath === file.virtualPath)
+    ) {
       throw new ConvexError("File already stored in target provider.");
+    }
+
+    if (file.storageProvider === args.targetProvider && file.storageProvider === "convex") {
+      const updated = await ctx.runMutation(
+        internal.transfer.updateVirtualPathInternal,
+        {
+          storageId: file.storageId,
+          virtualPath: resolvedVirtualPath ?? null,
+        },
+      );
+      return {
+        storageId: updated.storageId,
+        storageProvider: updated.storageProvider,
+        virtualPath: updated.virtualPath ?? null,
+      };
     }
 
     const needsR2 = file.storageProvider === "r2" || args.targetProvider === "r2";
     const r2Config = needsR2 ? requireR2Config(args.r2Config, "R2 transfers") : null;
+
+    let plannedStorageId: string | null = null;
+    if (args.targetProvider === "r2") {
+      plannedStorageId = resolvedVirtualPath ?? file.virtualPath ?? crypto.randomUUID();
+      const existing = await ctx.runQuery(internal.transfer.getFileForTransfer, {
+        storageId: plannedStorageId,
+      });
+      if (existing && existing._id !== file._id) {
+        throw new ConvexError("Storage ID already exists.");
+      }
+    }
 
     let sourceUrl: string | null = null;
     if (file.storageProvider === "convex") {
@@ -126,7 +224,7 @@ export const transferFile: RegisteredAction<
     } else {
       const buffer = await response.arrayBuffer();
       const body = new Uint8Array(buffer);
-      newStorageId = crypto.randomUUID();
+      newStorageId = plannedStorageId ?? crypto.randomUUID();
       const r2 = createR2Client(r2Config!);
       await r2.send(
         new PutObjectCommand({
@@ -144,7 +242,36 @@ export const transferFile: RegisteredAction<
       targetProvider: args.targetProvider,
       sourceProvider: file.storageProvider,
       r2Config: r2Config ?? undefined,
+      ...(resolvedVirtualPath !== undefined ? { virtualPath: resolvedVirtualPath } : {}),
     });
+  },
+});
+
+export const updateVirtualPathInternal = internalMutation({
+  args: {
+    storageId: v.string(),
+    virtualPath: v.union(v.null(), v.string()),
+  },
+  returns: v.object({
+    storageId: v.string(),
+    storageProvider: storageProviderValidator,
+    virtualPath: v.union(v.string(), v.null()),
+  }),
+  handler: async (ctx, args) => {
+    const file = await findFileByStorageId(ctx, args.storageId);
+    if (!file) {
+      throw new ConvexError("File not found.");
+    }
+
+    await ctx.db.patch(file._id, {
+      virtualPath: args.virtualPath ?? undefined,
+    });
+
+    return {
+      storageId: file.storageId,
+      storageProvider: file.storageProvider,
+      virtualPath: args.virtualPath ?? null,
+    };
   },
 });
 
@@ -155,10 +282,12 @@ export const commitTransfer = internalMutation({
     targetProvider: storageProviderValidator,
     sourceProvider: storageProviderValidator,
     r2Config: v.optional(r2ConfigValidator),
+    virtualPath: v.optional(v.union(v.null(), v.string())),
   },
   returns: v.object({
     storageId: v.string(),
     storageProvider: storageProviderValidator,
+    virtualPath: v.union(v.string(), v.null()),
   }),
   handler: async (ctx, args) => {
     const file = await findFileByStorageId(ctx, args.storageId);
@@ -181,11 +310,21 @@ export const commitTransfer = internalMutation({
         .collect(),
     ]);
 
+    const updates: {
+      storageId: string;
+      storageProvider: StorageProvider;
+      virtualPath?: string | undefined;
+    } = {
+      storageId: args.newStorageId,
+      storageProvider: args.targetProvider,
+    };
+
+    if (args.virtualPath !== undefined) {
+      updates.virtualPath = args.virtualPath ?? undefined;
+    }
+
     await Promise.all([
-      ctx.db.patch(file._id, {
-        storageId: args.newStorageId,
-        storageProvider: args.targetProvider,
-      }),
+      ctx.db.patch(file._id, updates),
       ...accessRows.map((row) =>
         ctx.db.patch(row._id, { storageId: args.newStorageId }),
       ),
@@ -200,9 +339,13 @@ export const commitTransfer = internalMutation({
       r2Config: args.r2Config ?? undefined,
     });
 
+    const nextVirtualPath =
+      args.virtualPath !== undefined ? args.virtualPath : file.virtualPath ?? null;
+
     return {
       storageId: args.newStorageId,
       storageProvider: args.targetProvider,
+      virtualPath: nextVirtualPath ?? null,
     };
   },
 });
@@ -232,4 +375,13 @@ async function deleteStorageFileWithRetry(
   }
 
   await retrier.run(ctx, api.cleanUp.deleteStorageFile, args);
+}
+
+function basenameFromPath(value?: string | null) {
+  if (!value) return null;
+  const trimmed = value.replace(/\/+$/g, "");
+  if (!trimmed) return null;
+  const parts = trimmed.split("/");
+  const name = parts[parts.length - 1];
+  return name || null;
 }

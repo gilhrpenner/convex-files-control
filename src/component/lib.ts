@@ -18,6 +18,15 @@ export function normalizeAccessKey(accessKey?: string | null) {
   return trimmed === "" ? null : trimmed;
 }
 
+export function normalizeVirtualPath(virtualPath?: string | null) {
+  if (typeof virtualPath !== "string") {
+    return null;
+  }
+
+  const trimmed = virtualPath.trim();
+  return trimmed === "" ? null : trimmed;
+}
+
 export function normalizeAccessKeys(accessKeys: string[]) {
   const normalized = accessKeys
     .map((key) => normalizeAccessKey(key))
@@ -33,6 +42,13 @@ export async function findFileByStorageId(ctx: ReadCtx, storageId: string) {
   return ctx.db
     .query("files")
     .withIndex("by_storageId", (q) => q.eq("storageId", storageId))
+    .first();
+}
+
+export async function findFileByVirtualPath(ctx: ReadCtx, virtualPath: string) {
+  return ctx.db
+    .query("files")
+    .withIndex("by_virtualPath", (q) => q.eq("virtualPath", virtualPath))
     .first();
 }
 
