@@ -94,7 +94,8 @@ const requireR2Config = (input?: R2ConfigInput, context?: string): R2Config => {
     .map(([, envVar]) => envVar);
 
   const suffix = context ? ` for ${context}` : "";
-  const missingText = missing.length > 0 ? ` Missing: ${missing.join(", ")}` : "";
+  const missingText =
+    missing.length > 0 ? ` Missing: ${missing.join(", ")}` : "";
   throw new Error(
     `R2 configuration is missing required fields${suffix}.${missingText}`,
   );
@@ -212,7 +213,11 @@ export interface RegisterRoutesOptions {
   checkDownloadRequest?: (
     ctx: RunHttpActionCtx,
     args: DownloadRequestArgs,
-  ) => void | Response | { accessKey: string } | Promise<void | Response | { accessKey: string }>;
+  ) =>
+    | void
+    | Response
+    | { accessKey: string }
+    | Promise<void | Response | { accessKey: string }>;
 }
 
 /**
@@ -293,7 +298,11 @@ export function registerRoutes(
         const origin = getOrigin(request);
         const contentType = request.headers.get("Content-Type") ?? "";
         if (!contentType.includes("multipart/form-data")) {
-          return jsonError("Content-Type must be multipart/form-data", 415, origin);
+          return jsonError(
+            "Content-Type must be multipart/form-data",
+            415,
+            origin,
+          );
         }
 
         const formData = await request.formData();
@@ -319,6 +328,7 @@ export function registerRoutes(
           expiresAt: expiresAt ?? undefined,
           provider,
           request,
+          formData,
         });
 
         // If hook returns a Response, wrap it with CORS headers
@@ -327,12 +337,20 @@ export function registerRoutes(
         }
 
         if (!hookResult || typeof hookResult !== "object") {
-          return jsonError("checkUploadRequest must return accessKeys", 500, origin);
+          return jsonError(
+            "checkUploadRequest must return accessKeys",
+            500,
+            origin,
+          );
         }
 
         const { accessKeys, virtualPath } = hookResult;
         if (!accessKeys || accessKeys.length === 0) {
-          return jsonError("checkUploadRequest must return accessKeys", 500, origin);
+          return jsonError(
+            "checkUploadRequest must return accessKeys",
+            500,
+            origin,
+          );
         }
 
         let r2Config: R2Config | undefined = undefined;
@@ -341,19 +359,24 @@ export function registerRoutes(
             r2Config = requireR2Config(r2, "R2 uploads");
           } catch (error) {
             return jsonError(
-              error instanceof Error ? error.message : "R2 configuration missing.",
+              error instanceof Error
+                ? error.message
+                : "R2 configuration missing.",
               500,
               origin,
             );
           }
         }
 
-        const { uploadUrl, uploadToken, storageId: presetStorageId } =
-          await ctx.runMutation(component.upload.generateUploadUrl, {
-            provider,
-            r2Config,
-            virtualPath,
-          });
+        const {
+          uploadUrl,
+          uploadToken,
+          storageId: presetStorageId,
+        } = await ctx.runMutation(component.upload.generateUploadUrl, {
+          provider,
+          r2Config,
+          virtualPath,
+        });
 
         const uploadResponse = await fetch(uploadUrl, {
           method: provider === "r2" ? "PUT" : "POST",
@@ -503,13 +526,21 @@ export function registerRoutes(
 
         const fileResponse = await fetch(result.downloadUrl);
         if (!fileResponse.ok || !fileResponse.body) {
-          return jsonError("File not available", 404, origin, downloadCorsAllowHeaders);
+          return jsonError(
+            "File not available",
+            404,
+            origin,
+            downloadCorsAllowHeaders,
+          );
         }
 
         const filename = sanitizeFilename(url.searchParams.get("filename"));
         const headers = corsHeaders(origin, downloadCorsAllowHeaders);
         headers.set("Cache-Control", "no-store");
-        headers.set("Content-Disposition", `attachment; filename="${filename}"`);
+        headers.set(
+          "Content-Disposition",
+          `attachment; filename="${filename}"`,
+        );
 
         const ct = fileResponse.headers.get("Content-Type");
         if (ct) {
@@ -560,11 +591,7 @@ export function buildDownloadUrl({
   filename,
 }: BuildDownloadUrlOptions): string {
   const normalizedBase = normalizeBaseUrl(baseUrl);
-  const endpoint = buildEndpointUrl(
-    normalizedBase,
-    pathPrefix,
-    "download",
-  );
+  const endpoint = buildEndpointUrl(normalizedBase, pathPrefix, "download");
   const params = new URLSearchParams({ token: downloadToken });
   if (filename) params.set("filename", filename);
   return `${endpoint}?${params.toString()}`;
@@ -675,6 +702,7 @@ export type UploadRequestArgs = {
   expiresAt?: number;
   provider: StorageProvider;
   request: Request;
+  formData: FormData;
 };
 
 export type UploadRequestResult =
@@ -706,9 +734,7 @@ type AccessKeyArgs = {
 };
 
 export type FilesControlHooks<DataModel extends GenericDataModel> = {
-  checkUpload?: (
-    ctx: GenericMutationCtx<DataModel>,
-  ) => void | Promise<void>;
+  checkUpload?: (ctx: GenericMutationCtx<DataModel>) => void | Promise<void>;
   checkFileMutation?: (
     ctx: GenericMutationCtx<DataModel>,
     storageId: string,
@@ -736,9 +762,7 @@ export type FilesControlHooks<DataModel extends GenericDataModel> = {
     ctx: GenericQueryCtx<DataModel>,
     accessKey: string,
   ) => void | Promise<void>;
-  checkListFiles?: (
-    ctx: GenericQueryCtx<DataModel>,
-  ) => void | Promise<void>;
+  checkListFiles?: (ctx: GenericQueryCtx<DataModel>) => void | Promise<void>;
   checkListDownloadGrants?: (
     ctx: GenericQueryCtx<DataModel>,
   ) => void | Promise<void>;
@@ -823,7 +847,11 @@ export class FilesControl {
 
   async generateUploadUrl(
     ctx: RunMutationCtx,
-    args: { provider?: StorageProvider; r2Config?: R2Config; virtualPath?: string } = {},
+    args: {
+      provider?: StorageProvider;
+      r2Config?: R2Config;
+      virtualPath?: string;
+    } = {},
   ) {
     const provider = args.provider ?? "convex";
     const r2Config =
@@ -872,7 +900,10 @@ export class FilesControl {
     ctx: RunMutationCtx,
     args: { storageId: string; expiresAt: number | null },
   ) {
-    return ctx.runMutation(this.component.accessControl.updateFileExpiration, args);
+    return ctx.runMutation(
+      this.component.accessControl.updateFileExpiration,
+      args,
+    );
   }
 
   async deleteFile(

@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import type { Auth, HttpRouter } from "convex/server";
 import type { ComponentApi } from "../component/_generated/component.js";
-import { buildDownloadUrl, registerRoutes, uploadFormFields } from "../client/index.js";
+import {
+  buildDownloadUrl,
+  registerRoutes,
+  uploadFormFields,
+} from "../client/index.js";
 
 const component = {
   accessControl: {
@@ -140,13 +144,14 @@ describe("registerRoutes", () => {
     }));
     const ctx = makeCtx(runMutation);
 
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("file", { status: 200 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("file", { status: 200 })),
+    );
 
     await handler(
       ctx,
-      buildDownloadRequest(
-        "https://example.com/files/download?token=token",
-      ),
+      buildDownloadRequest("https://example.com/files/download?token=token"),
     );
 
     expect(runMutation).toHaveBeenCalledWith(
@@ -157,7 +162,9 @@ describe("registerRoutes", () => {
 
   test("download route uses accessKey from checkDownloadRequest hook", async () => {
     const router = createRouter();
-    const checkDownloadRequest = vi.fn(async () => ({ accessKey: "from-hook" }));
+    const checkDownloadRequest = vi.fn(async () => ({
+      accessKey: "from-hook",
+    }));
     registerRoutes(router, component, { checkDownloadRequest });
     const downloadRoute = getRoute(router, "/files/download", "GET");
     const handler = getHandler(downloadRoute.handler);
@@ -168,7 +175,10 @@ describe("registerRoutes", () => {
     }));
     const ctx = makeCtx(runMutation);
 
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("file", { status: 200 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("file", { status: 200 })),
+    );
 
     await handler(
       ctx,
@@ -186,7 +196,9 @@ describe("registerRoutes", () => {
 
   test("download route forwards password from query or header", async () => {
     const router = createRouter();
-    registerRoutes(router, component, { passwordHeader: "x-download-password" });
+    registerRoutes(router, component, {
+      passwordHeader: "x-download-password",
+    });
     const downloadRoute = getRoute(router, "/files/download", "GET");
     const handler = getHandler(downloadRoute.handler);
 
@@ -196,7 +208,10 @@ describe("registerRoutes", () => {
     }));
     const ctx = makeCtx(runMutation);
 
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("file", { status: 200 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("file", { status: 200 })),
+    );
 
     await handler(
       ctx,
@@ -227,7 +242,10 @@ describe("registerRoutes", () => {
   test("upload route validates input", async () => {
     const checkUploadRequest = mockCheckUploadRequest(["a"]);
     const router = createRouter();
-    registerRoutes(router, component, { enableUploadRoute: true, checkUploadRequest });
+    registerRoutes(router, component, {
+      enableUploadRoute: true,
+      checkUploadRequest,
+    });
     const uploadRoute = getRoute(router, "/files/upload", "POST");
     const handler = getHandler(uploadRoute.handler);
 
@@ -257,24 +275,34 @@ describe("registerRoutes", () => {
     expect(missingFileResponse.status).toBe(400);
 
     const invalidTypeRequest = buildUploadRequest({
-      [uploadFormFields.file]: new File(["file"], "filename", { type: "text/plain" }),
+      [uploadFormFields.file]: new File(["file"], "filename", {
+        type: "text/plain",
+      }),
       [uploadFormFields.expiresAt]: new File(["nope"], "filename"),
     });
     const invalidTypeResponse = await handler(makeCtx(), invalidTypeRequest);
     expect(invalidTypeResponse.status).toBe(400);
 
     const invalidNumberRequest = buildUploadRequest({
-      [uploadFormFields.file]: new File(["file"], "filename", { type: "text/plain" }),
+      [uploadFormFields.file]: new File(["file"], "filename", {
+        type: "text/plain",
+      }),
       [uploadFormFields.expiresAt]: "nope",
     });
-    const invalidNumberResponse = await handler(makeCtx(), invalidNumberRequest);
+    const invalidNumberResponse = await handler(
+      makeCtx(),
+      invalidNumberRequest,
+    );
     expect(invalidNumberResponse.status).toBe(400);
   });
 
   test("upload route handles uploads", async () => {
     const checkUploadRequest = mockCheckUploadRequest(["a", "b"]);
     const router = createRouter();
-    registerRoutes(router, component, { enableUploadRoute: true, checkUploadRequest });
+    registerRoutes(router, component, {
+      enableUploadRoute: true,
+      checkUploadRequest,
+    });
     const uploadRoute = getRoute(router, "/files/upload", "POST");
     const handler = getHandler(uploadRoute.handler);
 
@@ -322,7 +350,9 @@ describe("registerRoutes", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const request = buildUploadRequest({
-      [uploadFormFields.file]: new File(["file"], "filename", { type: "text/plain" }),
+      [uploadFormFields.file]: new File(["file"], "filename", {
+        type: "text/plain",
+      }),
       [uploadFormFields.expiresAt]: "123",
     });
 
@@ -351,7 +381,9 @@ describe("registerRoutes", () => {
     checkUploadRequest.mockResolvedValue({ accessKeys: ["a"] });
 
     const nullRequest = buildUploadRequest({
-      [uploadFormFields.file]: new File(["file"], "filename", { type: "text/plain" }),
+      [uploadFormFields.file]: new File(["file"], "filename", {
+        type: "text/plain",
+      }),
       [uploadFormFields.expiresAt]: "null",
     });
 
@@ -384,7 +416,10 @@ describe("registerRoutes", () => {
   test("upload route uses btoa fallback when Buffer is unavailable", async () => {
     const checkUploadRequest = mockCheckUploadRequest(["a"]);
     const router = createRouter();
-    registerRoutes(router, component, { enableUploadRoute: true, checkUploadRequest });
+    registerRoutes(router, component, {
+      enableUploadRoute: true,
+      checkUploadRequest,
+    });
     const uploadRoute = getRoute(router, "/files/upload", "POST");
     const handler = getHandler(uploadRoute.handler);
 
@@ -474,7 +509,10 @@ describe("registerRoutes", () => {
   test("upload route skips TextDecoder when unavailable", async () => {
     const checkUploadRequest = mockCheckUploadRequest(["a"]);
     const router = createRouter();
-    registerRoutes(router, component, { enableUploadRoute: true, checkUploadRequest });
+    registerRoutes(router, component, {
+      enableUploadRoute: true,
+      checkUploadRequest,
+    });
     const uploadRoute = getRoute(router, "/files/upload", "POST");
     const handler = getHandler(uploadRoute.handler);
 
@@ -558,7 +596,10 @@ describe("registerRoutes", () => {
   test("upload route uses TextDecoder when available", async () => {
     const checkUploadRequest = mockCheckUploadRequest(["a"]);
     const router = createRouter();
-    registerRoutes(router, component, { enableUploadRoute: true, checkUploadRequest });
+    registerRoutes(router, component, {
+      enableUploadRoute: true,
+      checkUploadRequest,
+    });
     const uploadRoute = getRoute(router, "/files/upload", "POST");
     const handler = getHandler(uploadRoute.handler);
 
@@ -647,7 +688,10 @@ describe("registerRoutes", () => {
   test("upload route throws when base64 encoding is unavailable", async () => {
     const checkUploadRequest = mockCheckUploadRequest(["a"]);
     const router = createRouter();
-    registerRoutes(router, component, { enableUploadRoute: true, checkUploadRequest });
+    registerRoutes(router, component, {
+      enableUploadRoute: true,
+      checkUploadRequest,
+    });
     const uploadRoute = getRoute(router, "/files/upload", "POST");
     const handler = getHandler(uploadRoute.handler);
 
@@ -778,7 +822,9 @@ describe("registerRoutes", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const request = buildUploadRequest({
-      [uploadFormFields.file]: new File(["file"], "filename", { type: "text/plain" }),
+      [uploadFormFields.file]: new File(["file"], "filename", {
+        type: "text/plain",
+      }),
     });
 
     await handler(ctx, request);
@@ -793,13 +839,155 @@ describe("registerRoutes", () => {
     });
   });
 
+  test("upload route passes formData to checkUploadRequest hook", async () => {
+    let capturedFormData: FormData | undefined;
+    const checkUploadRequest = vi.fn(
+      async (_ctx: unknown, args: { formData: FormData }) => {
+        capturedFormData = args.formData;
+        return { accessKeys: ["a"] };
+      },
+    );
+
+    const router = createRouter();
+    registerRoutes(router, component, {
+      enableUploadRoute: true,
+      checkUploadRequest,
+    });
+    const uploadRoute = getRoute(router, "/files/upload", "POST");
+    const handler = getHandler(uploadRoute.handler);
+
+    const uploadUrl = "https://upload.example.com";
+    const runMutation = vi.fn(async (ref) => {
+      if (ref === component.upload.generateUploadUrl) {
+        return {
+          uploadUrl,
+          uploadToken: "token",
+          uploadTokenExpiresAt: Date.now(),
+          storageProvider: "convex",
+          storageId: null,
+        };
+      }
+      if (ref === component.upload.finalizeUpload) {
+        return {
+          storageId: "storage",
+          storageProvider: "convex",
+          expiresAt: null,
+          metadata: null,
+        };
+      }
+      throw new Error("Unexpected mutation");
+    });
+
+    const ctx = makeCtx(runMutation);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url) => {
+        if (url === uploadUrl) {
+          return new Response(JSON.stringify({ storageId: "storage" }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        return new Response(null, { status: 404 });
+      }),
+    );
+
+    const request = buildUploadRequest({
+      [uploadFormFields.file]: new File(["file"], "filename", {
+        type: "text/plain",
+      }),
+      customField: "customValue",
+      entityId: "entity-123",
+    });
+
+    const response = await handler(ctx, request);
+    expect(response.status).toBe(200);
+    expect(checkUploadRequest).toHaveBeenCalledTimes(1);
+    expect(capturedFormData).toBeDefined();
+    expect(capturedFormData?.get("customField")).toBe("customValue");
+    expect(capturedFormData?.get("entityId")).toBe("entity-123");
+  });
+
+  test("checkUploadRequest can use formData to set virtualPath", async () => {
+    const checkUploadRequest = vi.fn(
+      async (_ctx: unknown, args: { formData: FormData }) => {
+        const entityId = args.formData.get("entityId");
+        return {
+          accessKeys: ["a"],
+          virtualPath: `/entities/${entityId}/file.txt`,
+        };
+      },
+    );
+
+    const router = createRouter();
+    registerRoutes(router, component, {
+      enableUploadRoute: true,
+      checkUploadRequest,
+    });
+    const uploadRoute = getRoute(router, "/files/upload", "POST");
+    const handler = getHandler(uploadRoute.handler);
+
+    const uploadUrl = "https://upload.example.com";
+    let capturedFinalizeArgs: Record<string, unknown> | undefined;
+    const runMutation = vi.fn(async (ref, args) => {
+      if (ref === component.upload.generateUploadUrl) {
+        return {
+          uploadUrl,
+          uploadToken: "token",
+          uploadTokenExpiresAt: Date.now(),
+          storageProvider: "convex",
+          storageId: null,
+        };
+      }
+      if (ref === component.upload.finalizeUpload) {
+        capturedFinalizeArgs = args as Record<string, unknown>;
+        return {
+          storageId: "storage",
+          storageProvider: "convex",
+          expiresAt: null,
+          metadata: null,
+          virtualPath: args.virtualPath,
+        };
+      }
+      throw new Error("Unexpected mutation");
+    });
+
+    const ctx = makeCtx(runMutation);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url) => {
+        if (url === uploadUrl) {
+          return new Response(JSON.stringify({ storageId: "storage" }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        return new Response(null, { status: 404 });
+      }),
+    );
+
+    const request = buildUploadRequest({
+      [uploadFormFields.file]: new File(["file"], "filename", {
+        type: "text/plain",
+      }),
+      entityId: "entity-456",
+    });
+
+    const response = await handler(ctx, request);
+    expect(response.status).toBe(200);
+    expect(capturedFinalizeArgs?.virtualPath).toBe(
+      "/entities/entity-456/file.txt",
+    );
+  });
+
   test("upload route returns hook response with CORS headers", async () => {
     const checkUploadRequest = mockCheckUploadRequest(["a"]);
-    const onUploadComplete = vi.fn(async () =>
-      new Response("hooked", {
-        status: 202,
-        headers: { "X-Hook": "true" },
-      }),
+    const onUploadComplete = vi.fn(
+      async () =>
+        new Response("hooked", {
+          status: 202,
+          headers: { "X-Hook": "true" },
+        }),
     );
     const router = createRouter();
     registerRoutes(router, component, {
@@ -848,7 +1036,9 @@ describe("registerRoutes", () => {
     );
 
     const request = buildUploadRequest({
-      [uploadFormFields.file]: new File(["file"], "filename", { type: "text/plain" }),
+      [uploadFormFields.file]: new File(["file"], "filename", {
+        type: "text/plain",
+      }),
     });
     request.headers.set("Origin", "https://origin.example");
 
@@ -863,7 +1053,10 @@ describe("registerRoutes", () => {
   test("upload route handles upstream failures", async () => {
     const checkUploadRequest = mockCheckUploadRequest(["a"]);
     const router = createRouter();
-    registerRoutes(router, component, { enableUploadRoute: true, checkUploadRequest });
+    registerRoutes(router, component, {
+      enableUploadRoute: true,
+      checkUploadRequest,
+    });
     const uploadRoute = getRoute(router, "/files/upload", "POST");
     const handler = getHandler(uploadRoute.handler);
 
@@ -883,21 +1076,29 @@ describe("registerRoutes", () => {
 
     const ctx = makeCtx(runMutation);
 
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 500 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(null, { status: 500 })),
+    );
 
     const request = buildUploadRequest({
-      [uploadFormFields.file]: new File(["file"], "filename", { type: "text/plain" }),
+      [uploadFormFields.file]: new File(["file"], "filename", {
+        type: "text/plain",
+      }),
     });
 
     const failedUpload = await handler(ctx, request);
     expect(failedUpload.status).toBe(502);
 
-    vi.stubGlobal("fetch", vi.fn(async () => {
-      return new Response(JSON.stringify({}), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
-    }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        return new Response(JSON.stringify({}), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }),
+    );
 
     const missingStorage = await handler(ctx, request);
     expect(missingStorage.status).toBe(502);
@@ -909,7 +1110,10 @@ describe("registerRoutes", () => {
     const downloadRoute = getRoute(router, "/files/download", "GET");
     const handler = getHandler(downloadRoute.handler);
 
-    const missingToken = await handler(makeCtx(), buildDownloadRequest("https://example.com/files/download"));
+    const missingToken = await handler(
+      makeCtx(),
+      buildDownloadRequest("https://example.com/files/download"),
+    );
     expect(missingToken.status).toBe(400);
 
     const missingAccess = await handler(
@@ -928,7 +1132,10 @@ describe("registerRoutes", () => {
     const runMutation = vi.fn(async (_ref, _args) => ({ status: "expired" }));
     const ctx = makeCtx(runMutation);
 
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 404 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(null, { status: 404 })),
+    );
 
     const cases = [
       { status: "expired", code: 410 },
@@ -948,9 +1155,7 @@ describe("registerRoutes", () => {
       } as any);
       const response = await handler(
         ctx,
-        buildDownloadRequest(
-          "https://example.com/files/download?token=token",
-        ),
+        buildDownloadRequest("https://example.com/files/download?token=token"),
       );
       expect(response.status).toBe(entry.code);
     }
@@ -969,7 +1174,10 @@ describe("registerRoutes", () => {
 
     const ctx = makeCtx(runMutation);
 
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 200 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(null, { status: 200 })),
+    );
     const noBodyResponse = await handler(
       ctx,
       buildDownloadRequest(
@@ -978,7 +1186,10 @@ describe("registerRoutes", () => {
     );
     expect(noBodyResponse.status).toBe(404);
 
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 404 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(null, { status: 404 })),
+    );
     const missingResponse = await handler(
       ctx,
       buildDownloadRequest(
@@ -987,15 +1198,18 @@ describe("registerRoutes", () => {
     );
     expect(missingResponse.status).toBe(404);
 
-    vi.stubGlobal("fetch", vi.fn(async () => {
-      return new Response("file", {
-        status: 200,
-        headers: {
-          "Content-Type": "text/plain",
-          "Content-Length": "4",
-        },
-      });
-    }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        return new Response("file", {
+          status: 200,
+          headers: {
+            "Content-Type": "text/plain",
+            "Content-Length": "4",
+          },
+        });
+      }),
+    );
 
     const okResponse = await handler(
       ctx,
@@ -1008,7 +1222,7 @@ describe("registerRoutes", () => {
     expect(okResponse.headers.get("Access-Control-Allow-Origin")).toBe("*");
     expect(okResponse.headers.get("Cache-Control")).toBe("no-store");
     expect(okResponse.headers.get("Content-Disposition")).toBe(
-      "attachment; filename=\"bad_name\"",
+      'attachment; filename="bad_name"',
     );
     expect(okResponse.headers.get("Content-Type")).toBe("text/plain");
     expect(okResponse.headers.get("Content-Length")).toBe("4");
@@ -1018,7 +1232,7 @@ describe("registerRoutes", () => {
       buildDownloadRequest("https://example.com/files/download?token=token"),
     );
     expect(defaultNameResponse.headers.get("Content-Disposition")).toBe(
-      "attachment; filename=\"download\"",
+      'attachment; filename="download"',
     );
 
     const whitespaceNameResponse = await handler(
@@ -1028,7 +1242,7 @@ describe("registerRoutes", () => {
       ),
     );
     expect(whitespaceNameResponse.headers.get("Content-Disposition")).toBe(
-      "attachment; filename=\"download\"",
+      'attachment; filename="download"',
     );
   });
 
@@ -1046,11 +1260,14 @@ describe("registerRoutes", () => {
 
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => ({
-        ok: true,
-        body: "file",
-        headers: new Headers(),
-      }) as any),
+      vi.fn(
+        async () =>
+          ({
+            ok: true,
+            body: "file",
+            headers: new Headers(),
+          }) as any,
+      ),
     );
 
     const response = await handler(

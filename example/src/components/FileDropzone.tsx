@@ -41,7 +41,7 @@ export function FileDropzone({ files: externalFiles, onFilesUpdated, className }
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    maxSize: 20 * 1024 * 1024, // 20MB
+    maxSize: 15 * 1024 * 1024, // 15MB
   });
 
   const handleNameChange = (id: string, newName: string) => {

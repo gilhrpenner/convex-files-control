@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.1 (2026-01-02)
+
+### Features
+
+- **http**: `checkUploadRequest` hook now receives `formData` parameter,
+  enabling access to custom form fields for authorization and path generation.
+
+---
+
 ## 0.5.0 (2026-01-02)
 
 ### Breaking Changes
