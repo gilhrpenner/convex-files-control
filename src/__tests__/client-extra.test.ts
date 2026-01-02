@@ -24,6 +24,7 @@ const component = {
   },
   queries: {
     getFile: Symbol("getFile"),
+    getFileByVirtualPath: Symbol("getFileByVirtualPath"),
     hasAccessKey: Symbol("hasAccessKey"),
     listAccessKeysPage: Symbol("listAccessKeysPage"),
     listDownloadGrantsPage: Symbol("listDownloadGrantsPage"),
@@ -568,6 +569,7 @@ describe("FilesControl class and clientApi", () => {
       storageId: "storage",
       storageProvider: "convex",
       expiresAt: null,
+      virtualPath: "/path/file.txt",
     };
     const grant = {
       _id: "grant-id",
@@ -579,6 +581,9 @@ describe("FilesControl class and clientApi", () => {
     };
     return vi.fn(async (ref: unknown) => {
       if (ref === component.queries.getFile) {
+        return options?.returnNullFile ? null : file;
+      }
+      if (ref === component.queries.getFileByVirtualPath) {
         return options?.returnNullFile ? null : file;
       }
       if (ref === component.queries.listFilesPage) {
@@ -809,6 +814,7 @@ describe("FilesControl class and clientApi", () => {
       checkDownloadConsume: vi.fn(async () => undefined),
       checkMaintenance: vi.fn(async () => undefined),
       checkReadFile: vi.fn(async () => undefined),
+      checkReadVirtualPath: vi.fn(async () => undefined),
       checkReadAccessKey: vi.fn(async () => undefined),
       checkListFiles: vi.fn(async () => undefined),
       checkListDownloadGrants: vi.fn(async () => undefined),
@@ -862,6 +868,9 @@ describe("FilesControl class and clientApi", () => {
     await getHandler(api.deleteFile)(ctx, { storageId: "storage" });
     await getHandler(api.cleanupExpired)(ctx, { limit: 1 });
     await getHandler(api.getFile)(ctx, { storageId: "storage" });
+    await getHandler(api.getFileByVirtualPath)(ctx, {
+      virtualPath: "/path/file.txt",
+    });
     await getHandler(api.listFilesPage)(ctx, {
       paginationOpts: { numItems: 1, cursor: null },
     });
@@ -887,6 +896,7 @@ describe("FilesControl class and clientApi", () => {
     expect(hooks.checkDownloadConsume).toHaveBeenCalled();
     expect(hooks.checkMaintenance).toHaveBeenCalled();
     expect(hooks.checkReadFile).toHaveBeenCalled();
+    expect(hooks.checkReadVirtualPath).toHaveBeenCalled();
     expect(hooks.checkReadAccessKey).toHaveBeenCalled();
     expect(hooks.checkListFiles).toHaveBeenCalled();
     expect(hooks.checkListDownloadGrants).toHaveBeenCalled();
@@ -942,6 +952,10 @@ describe("FilesControl class and clientApi", () => {
       storageId: "storage",
     });
     expect(missingFile).toBeNull();
+    const missingVirtual = await getHandler(api.getFileByVirtualPath)(ctx, {
+      virtualPath: "/path/file.txt",
+    });
+    expect(missingVirtual).toBeNull();
     await getHandler(api.listFilesPage)(ctx, {
       paginationOpts: { numItems: 1, cursor: null },
     });

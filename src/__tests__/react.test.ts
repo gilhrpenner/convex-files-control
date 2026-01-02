@@ -106,6 +106,53 @@ describe("useUploadFile", () => {
     );
   });
 
+  test("presigned upload forwards virtualPath", async () => {
+    const uploadUrl = "https://upload.example.com";
+    const uploadToken = "token";
+    const generateUploadUrl = vi.fn(async () => ({
+      uploadUrl,
+      uploadToken,
+      uploadTokenExpiresAt: Date.now(),
+      storageProvider: "convex",
+      storageId: null,
+    }));
+    const finalizeUpload = vi.fn(async (args: any) => ({
+      storageId: args.storageId,
+      storageProvider: "convex",
+      expiresAt: args.expiresAt ?? null,
+      metadata: null,
+    }));
+
+    const api = { generateUploadUrl, finalizeUpload } as any;
+    const { uploadViaPresignedUrl } = useUploadFile(api);
+
+    const fetchMock = vi.fn(async () => {
+      return new Response(JSON.stringify({ storageId: "storage" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const file = new File(["data"], "file.txt", { type: "text/plain" });
+    await uploadViaPresignedUrl({
+      file,
+      virtualPath: "/tenant/file.txt",
+    });
+
+    expect(generateUploadUrl).toHaveBeenCalledWith({
+      provider: "convex",
+      virtualPath: "/tenant/file.txt",
+    });
+    expect(finalizeUpload).toHaveBeenCalledWith({
+      uploadToken,
+      storageId: "storage",
+      fileName: "file.txt",
+      expiresAt: undefined,
+      virtualPath: "/tenant/file.txt",
+    });
+  });
+
   test("presigned upload throws on failure or missing storageId", async () => {
     const uploadUrl = "https://upload.example.com";
     const generateUploadUrl = vi.fn(async () => ({

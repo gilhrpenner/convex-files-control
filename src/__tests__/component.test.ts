@@ -296,6 +296,84 @@ describe("upload", () => {
     expect(pending?.storageProvider).toBe("convex");
   });
 
+  test("virtualPath validations", async () => {
+    const t = initConvexTest();
+
+    await expect(
+      t.mutation(api.upload.generateUploadUrl, {
+        provider: "convex",
+        virtualPath: "   ",
+      }),
+    ).rejects.toThrowError("Virtual path cannot be empty.");
+
+    const { storageId } = await createStorageFile(t, "upload");
+
+    const { uploadToken } = await t.mutation(api.upload.generateUploadUrl, {
+      provider: "convex",
+    });
+
+    await expect(
+      t.mutation(api.upload.finalizeUpload, {
+        uploadToken,
+        storageId,
+        accessKeys: ["key"],
+        virtualPath: " ",
+      }),
+    ).rejects.toThrowError("Virtual path cannot be empty.");
+
+    const { uploadToken: tokenWithPath } = await t.mutation(
+      api.upload.generateUploadUrl,
+      {
+        provider: "convex",
+        virtualPath: "/docs/report.pdf",
+      },
+    );
+
+    await expect(
+      t.mutation(api.upload.finalizeUpload, {
+        uploadToken: tokenWithPath,
+        storageId,
+        accessKeys: ["key"],
+        virtualPath: "/docs/other.pdf",
+      }),
+    ).rejects.toThrowError("Virtual path does not match pending upload.");
+
+    const { storageId: storageA } = await createStorageFile(t, "a");
+    await expect(
+      t.mutation(api.upload.registerFile, {
+        storageId: storageA,
+        storageProvider: "convex",
+        accessKeys: ["key"],
+        virtualPath: "   ",
+      }),
+    ).rejects.toThrowError("Virtual path cannot be empty.");
+
+    const { storageId: storageB } = await createStorageFile(t, "b");
+    await t.mutation(api.upload.registerFile, {
+      storageId: storageB,
+      storageProvider: "convex",
+      accessKeys: ["key"],
+      virtualPath: "/dup/path.txt",
+    });
+
+    await expect(
+      t.mutation(api.upload.generateUploadUrl, {
+        provider: "convex",
+        virtualPath: "/dup/path.txt",
+      }),
+    ).rejects.toThrowError("Virtual path already exists.");
+
+    const { storageId: storageC } = await createStorageFile(t, "c");
+    await expect(
+      t.mutation(api.upload.registerFile, {
+        storageId: storageC,
+        storageProvider: "convex",
+        accessKeys: ["key"],
+        virtualPath: "/dup/path.txt",
+      }),
+    ).rejects.toThrowError("Virtual path already exists.");
+  });
+
   test("finalizeUpload validates tokens and registers files", async () => {
     const t = initConvexTest();
     const { storageId } = await createStorageFile(t, "upload");
@@ -1034,6 +1112,33 @@ describe("queries", () => {
     const { storageId: missingFile } = await createStorageFile(t, "missing");
     const missing = await t.query(api.queries.getFile, {
       storageId: missingFile,
+    });
+    expect(missing).toBeNull();
+  });
+
+  test("getFileByVirtualPath returns file summary and handles empty input", async () => {
+    const t = initConvexTest();
+    const { storageId } = await createStorageFile(t, "vpath");
+    await t.mutation(api.upload.registerFile, {
+      storageId,
+      storageProvider: "convex",
+      accessKeys: ["key"],
+      virtualPath: "/tenant/report.pdf",
+    });
+
+    const found = await t.query(api.queries.getFileByVirtualPath, {
+      virtualPath: " /tenant/report.pdf ",
+    });
+
+    expect(found?.storageId).toBe(storageId);
+
+    const empty = await t.query(api.queries.getFileByVirtualPath, {
+      virtualPath: "   ",
+    });
+    expect(empty).toBeNull();
+
+    const missing = await t.query(api.queries.getFileByVirtualPath, {
+      virtualPath: "/missing",
     });
     expect(missing).toBeNull();
   });

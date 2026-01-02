@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   findFileByStorageId,
+  findFileByVirtualPath,
   hasAccessKey,
   hashPassword,
   normalizeAccessKey,
   normalizeAccessKeys,
+  normalizeVirtualPath,
   toStorageId,
   verifyPassword,
 } from "../component/lib.js";
@@ -28,6 +30,12 @@ describe("lib helpers", () => {
     ]);
   });
 
+  test("normalizeVirtualPath trims and rejects empty values", () => {
+    expect(normalizeVirtualPath(undefined)).toBeNull();
+    expect(normalizeVirtualPath("   ")).toBeNull();
+    expect(normalizeVirtualPath(" /path ")).toBe("/path");
+  });
+
   test("toStorageId preserves ids", () => {
     expect(toStorageId("storage" as string)).toBe("storage");
   });
@@ -46,6 +54,9 @@ describe("lib helpers", () => {
 
     const found = await findFileByStorageId(ctx, "storage");
     expect(found).toBe(file);
+
+    const foundVirtual = await findFileByVirtualPath(ctx, "/virtual");
+    expect(foundVirtual).toBe(file);
 
     const ctxAccess = {
       db: {
