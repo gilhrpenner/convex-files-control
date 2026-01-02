@@ -313,24 +313,11 @@ export function registerRoutes(
           formData.get(uploadFormFields.provider),
           defaultUploadProvider,
         );
-        const virtualPathEntry = formData.get(uploadFormFields.virtualPath);
-        if (virtualPathEntry !== null && typeof virtualPathEntry !== "string") {
-          return jsonError("'virtualPath' must be a string", 400, origin);
-        }
-        const virtualPath =
-          typeof virtualPathEntry === "string"
-            ? virtualPathEntry.trim()
-            : undefined;
-        if (virtualPath !== undefined && virtualPath === "") {
-          return jsonError("'virtualPath' cannot be empty", 400, origin);
-        }
 
-        // Call the auth hook to get access keys
         const hookResult = await checkUploadRequest(ctx, {
           file,
           expiresAt: expiresAt ?? undefined,
           provider,
-          virtualPath,
           request,
         });
 
@@ -343,7 +330,7 @@ export function registerRoutes(
           return jsonError("checkUploadRequest must return accessKeys", 500, origin);
         }
 
-        const { accessKeys } = hookResult;
+        const { accessKeys, virtualPath } = hookResult;
         if (!accessKeys || accessKeys.length === 0) {
           return jsonError("checkUploadRequest must return accessKeys", 500, origin);
         }
@@ -687,12 +674,11 @@ export type UploadRequestArgs = {
   file: Blob;
   expiresAt?: number;
   provider: StorageProvider;
-  virtualPath?: string;
   request: Request;
 };
 
 export type UploadRequestResult =
-  | { accessKeys: string[] }
+  | { accessKeys: string[]; virtualPath?: string }
   | Response;
 
 export type UploadCompleteArgs = {

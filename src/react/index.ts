@@ -143,9 +143,7 @@ export function useUploadFile<Api extends UploadApi>(
       const formData = new FormData();
       formData.append(uploadFormFields.file, file);
       formData.append(uploadFormFields.provider, provider);
-      if (args.virtualPath !== undefined) {
-        formData.append(uploadFormFields.virtualPath, args.virtualPath);
-      }
+
       if (expiresAt !== undefined) {
         formData.append(
           uploadFormFields.expiresAt,

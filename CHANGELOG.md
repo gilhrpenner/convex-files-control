@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.5.0 (2026-01-02)
+
+### Breaking Changes
+
+- **http!**: `virtualPath` is no longer accepted via form data in HTTP uploads.
+  For security, `virtualPath` must now be returned from the `checkUploadRequest`
+  hook. This prevents clients from specifying arbitrary file paths.
+- **types!**: Removed `virtualPath` from `UploadRequestArgs` type.
+
+### Features
+
+- **http**: `checkUploadRequest` hook can now return `virtualPath` to set the
+  file's storage path server-side.
+
+---
+
 ## 0.4.0 (2025-12-31)
 
 ### Features

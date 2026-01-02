@@ -21,8 +21,8 @@ Key traits:
 
 - Isolation: a component's tables live in its own namespace. Your application
   code does not directly read or write a component's tables.
-- Public surface: you interact with a component by calling its functions via
-  the component API.
+- Public surface: you interact with a component by calling its functions via the
+  component API.
 - Reusability: a component can be published as a package and re-mounted in
   multiple apps.
 
@@ -56,9 +56,9 @@ ctx.runMutation(components.convexFilesControl.upload.generateUploadUrl, {...})
 
 ## 1.3 How component APIs are consumed
 
-Important: component functions are not directly exposed to your client.
-You call them from your app's Convex functions (queries/mutations/actions). This
-provides a place to enforce auth and store your own metadata.
+Important: component functions are not directly exposed to your client. You call
+them from your app's Convex functions (queries/mutations/actions). This provides
+a place to enforce auth and store your own metadata.
 
 Example wrapper in your app:
 
@@ -82,26 +82,26 @@ export const generateUploadUrl = mutation({
 
 General Convex component behavior:
 
-- A component has its own schema and tables. Your app cannot query those
-  tables directly; you must use the component's functions.
-- Components are not automatically part of your public API. To expose them to
-  a client, you must create wrapper functions in your app.
+- A component has its own schema and tables. Your app cannot query those tables
+  directly; you must use the component's functions.
+- Components are not automatically part of your public API. To expose them to a
+  client, you must create wrapper functions in your app.
 - The component cannot store or enforce your app's domain data unless you
   explicitly pass it via wrapper functions or hooks.
 
 Repo-specific limitations and design choices:
 
-- This component stores only storage IDs, providers, ACLs, and download
-  grants. It does not store your business metadata (file names, owners, etc.).
-  You must store those in your own app tables.
-- Access control is enforced by access keys. The component does not verify
-  who the access key belongs to; your app does.
+- This component stores only storage IDs, providers, ACLs, and download grants.
+  It does not store your business metadata (file names, owners, etc.). You must
+  store those in your own app tables.
+- Access control is enforced by access keys. The component does not verify who
+  the access key belongs to; your app does.
 - Virtual paths (if you use them) are globally unique within the component.
   Multi-tenant apps should namespace paths at the app layer (e.g.,
   `/tenant/<id>/...`).
 - The component supports Convex storage and Cloudflare R2 only.
-- File transfer and metadata computation may download the full file into
-  memory (important for very large files).
+- File transfer and metadata computation may download the full file into memory
+  (important for very large files).
 - Cleanup is not automatic; you should schedule it (e.g., with cron jobs).
 
 ## 1.5 Runtime and usage expectations
@@ -120,9 +120,9 @@ SECTION 2 - CONVEX FILES CONTROL (DETAILED SYSTEM DOCUMENTATION)
 This section is a comprehensive, implementation-level reference for the
 component, client helpers, and React hook in this repository.
 
---------------------------------------------------------------------------------
-2.1 High-level overview
---------------------------------------------------------------------------------
+---
+
+## 2.1 High-level overview
 
 Convex Files Control provides:
 
@@ -142,9 +142,9 @@ The component and its helpers are built in three layers:
    builders, type helpers.
 3. React hook (`src/react/`): `useUploadFile`.
 
---------------------------------------------------------------------------------
-2.2 File map (what lives where)
---------------------------------------------------------------------------------
+---
+
+## 2.2 File map (what lives where)
 
 Component (core behavior, schema, functions):
 
@@ -182,9 +182,9 @@ Testing helper:
 
 - `src/test.ts`: `register` helper for `convex-test`.
 
---------------------------------------------------------------------------------
-2.3 Architecture diagram
---------------------------------------------------------------------------------
+---
+
+## 2.3 Architecture diagram
 
 ```mermaid
 flowchart LR
@@ -200,15 +200,16 @@ flowchart LR
   HttpRoutes --> ComponentAPI
 ```
 
---------------------------------------------------------------------------------
-2.4 Core data model
---------------------------------------------------------------------------------
+---
+
+## 2.4 Core data model
 
 Schema lives in `src/component/schema.ts`.
 
 ### Tables
 
-1) `files`
+1. `files`
+
 - `storageId: string` (primary identifier for the storage object)
 - `storageProvider: "convex" | "r2"`
 - `expiresAt?: number`
@@ -218,7 +219,8 @@ Schema lives in `src/component/schema.ts`.
   - `by_virtualPath`
   - `by_expiresAt`
 
-2) `fileAccess`
+2. `fileAccess`
+
 - `fileId: Id<"files">`
 - `storageId: string`
 - `accessKey: string`
@@ -227,7 +229,8 @@ Schema lives in `src/component/schema.ts`.
   - `by_storageId`
   - `by_accessKey_and_storageId`
 
-3) `downloadGrants`
+3. `downloadGrants`
+
 - `storageId: string`
 - `expiresAt?: number`
 - `maxUses: number | null`
@@ -242,7 +245,8 @@ Schema lives in `src/component/schema.ts`.
   - `by_storageId`
   - `by_expiresAt`
 
-4) `pendingUploads`
+4. `pendingUploads`
+
 - `expiresAt: number`
 - `storageProvider: "convex" | "r2"`
 - `storageId?: string` (pre-generated for R2)
@@ -258,26 +262,27 @@ Schema lives in `src/component/schema.ts`.
   downloads.
 - `pendingUploads` enforces a two-step upload flow with a TTL.
 
---------------------------------------------------------------------------------
-2.5 Core concepts and terminology
---------------------------------------------------------------------------------
+---
+
+## 2.5 Core concepts and terminology
 
 - storageId: Provider-specific identifier for the stored object. For Convex
   storage it is the Convex storage ID; for R2 it is a UUID key.
 - storageProvider: "convex" or "r2".
-- accessKey: An arbitrary string representing a user, tenant, or group. Used
-  for access control. It is normalized (trim + non-empty).
-- virtualPath: Optional logical path for a file (e.g., `/tenant/123/avatar.png`).
-  This is a metadata-only path for Convex storage and can be used as the real
-  object key for R2. Paths are globally unique within the component.
+- accessKey: An arbitrary string representing a user, tenant, or group. Used for
+  access control. It is normalized (trim + non-empty).
+- virtualPath: Optional logical path for a file (e.g.,
+  `/tenant/123/avatar.png`). This is a metadata-only path for Convex storage and
+  can be used as the real object key for R2. Paths are globally unique within
+  the component.
 - downloadGrant: A short-lived token that grants download access under
   configured constraints (max uses, expiration, optional password).
 - pendingUpload: A token created at upload initiation, ensuring the file is
   registered only if it corresponds to a recent upload.
 
---------------------------------------------------------------------------------
-2.6 Upload flows (presigned URL + HTTP)
---------------------------------------------------------------------------------
+---
+
+## 2.6 Upload flows (presigned URL + HTTP)
 
 ### 2.6.1 Presigned upload flow (client + app wrapper + component)
 
@@ -326,10 +331,10 @@ Key details from implementation (`src/component/upload.ts`):
   - For R2: metadata must be provided or computed separately.
 
 Note: To make R2 store the object at the virtual path, you must provide
-`virtualPath` during upload URL generation (or via the HTTP upload route),
-so the presigned URL uses that key. Supplying `virtualPath` only at
-finalize time will store the path in metadata but keep the underlying R2 key
-as whatever was used during upload.
+`virtualPath` during upload URL generation (or via the HTTP upload route), so
+the presigned URL uses that key. Supplying `virtualPath` only at finalize time
+will store the path in metadata but keep the underlying R2 key as whatever was
+used during upload.
 
 ### 2.6.2 HTTP upload route flow (optional)
 
@@ -365,15 +370,16 @@ Important HTTP upload rules:
   - `file` (required)
   - `provider` (optional)
   - `expiresAt` (optional: timestamp or "null")
-  - `virtualPath` (optional: trimmed non-empty string)
+- `virtualPath` is NOT accepted via form data for security. It must be returned
+  from the `checkUploadRequest` hook in `UploadRequestResult`.
 - Access keys are not accepted via the form. They must come from the
   `checkUploadRequest` hook.
 - When provider is R2, server requires R2 config from env or options.
 - Metadata is computed from the uploaded file (sha256, size, contentType).
 
---------------------------------------------------------------------------------
-2.7 Download grants and download flow
---------------------------------------------------------------------------------
+---
+
+## 2.7 Download grants and download flow
 
 ### 2.7.1 Create a download grant
 
@@ -383,8 +389,8 @@ Behavior:
 
 - Validates file exists and is not expired.
 - Validates `maxUses` (> 0 or null) and expiration is in the future.
-- Optional password is hashed with PBKDF2-SHA256 (120k iterations) and stored
-  on the grant.
+- Optional password is hashed with PBKDF2-SHA256 (120k iterations) and stored on
+  the grant.
 - `shareableLink` bypasses access key checks (unless overridden in HTTP route).
 
 ### 2.7.2 Consume a download grant
@@ -439,9 +445,9 @@ The optional HTTP route (registered via `registerRoutes`) handles downloads.
   - 403 for access denied/invalid password
   - 404 for not found / generic failure
 
---------------------------------------------------------------------------------
-2.8 Access control operations
---------------------------------------------------------------------------------
+---
+
+## 2.8 Access control operations
 
 From `src/component/accessControl.ts`:
 
@@ -455,9 +461,9 @@ From `src/component/accessControl.ts`:
   - Allows setting or clearing expiration (null).
   - Validates the timestamp is in the future.
 
---------------------------------------------------------------------------------
-2.9 Queries (read access)
---------------------------------------------------------------------------------
+---
+
+## 2.9 Queries (read access)
 
 From `src/component/queries.ts`:
 
@@ -471,9 +477,9 @@ From `src/component/queries.ts`:
 
 All list queries use cursor pagination via `convex-helpers`.
 
---------------------------------------------------------------------------------
-2.10 Cleanup and lifecycle management
---------------------------------------------------------------------------------
+---
+
+## 2.10 Cleanup and lifecycle management
 
 From `src/component/cleanUp.ts`:
 
@@ -494,20 +500,20 @@ path is used.
 
 Recommendation: schedule cleanup with a cron job in your app.
 
---------------------------------------------------------------------------------
-2.11 Transfers between providers
---------------------------------------------------------------------------------
+---
+
+## 2.11 Transfers between providers
 
 From `src/component/transfer.ts`:
 
-Goal: move a file between Convex storage and R2 while preserving ACLs and grants.
-Optional: update the virtual path during the transfer.
+Goal: move a file between Convex storage and R2 while preserving ACLs and
+grants. Optional: update the virtual path during the transfer.
 
 Transfer steps:
 
 1. Fetch file record (internal query).
-2. Verify provider change is necessary, unless the caller is only updating
-   the virtual path.
+2. Verify provider change is necessary, unless the caller is only updating the
+   virtual path.
 3. Create a signed source URL and `fetch` the file.
 4. Upload to the target provider:
    - Convex: `ctx.storage.store(blob)`
@@ -520,19 +526,20 @@ Transfer steps:
    - Delete the original storage object (with retry).
 
 Special cases:
+
 - If the target provider is the same and only the virtual path changes:
   - Convex storage: updates metadata only (no data re-upload).
   - R2: re-uploads the object to the new key and deletes the old one.
 - If a provided virtual path ends with `/`, the component tries to append the
-  existing filename (derived from the current virtual path or storageId). If
-  it cannot infer a name, it throws and asks for a full path.
+  existing filename (derived from the current virtual path or storageId). If it
+  cannot infer a name, it throws and asks for a full path.
 
 Limitation: the transfer flow downloads the entire file into memory before
 uploading, so it is not optimal for extremely large files.
 
---------------------------------------------------------------------------------
-2.12 Password hashing and access key normalization
---------------------------------------------------------------------------------
+---
+
+## 2.12 Password hashing and access key normalization
 
 From `src/component/lib.ts`:
 
@@ -545,9 +552,9 @@ From `src/component/lib.ts`:
   - 32-byte derived key
 - Password verification uses constant-time comparison.
 
---------------------------------------------------------------------------------
-2.13 R2 integration specifics
---------------------------------------------------------------------------------
+---
+
+## 2.13 R2 integration specifics
 
 From `src/component/r2.ts` and `src/shared/r2.ts`:
 
@@ -573,9 +580,9 @@ R2 config can be passed:
   - `R2_SECRET_ACCESS_KEY`
   - `R2_BUCKET_NAME`
 
---------------------------------------------------------------------------------
-2.14 Client/server helper APIs
---------------------------------------------------------------------------------
+---
+
+## 2.14 Client/server helper APIs
 
 ### 2.14.1 `registerRoutes` (HTTP upload/download)
 
@@ -625,11 +632,11 @@ buildDownloadUrl({
 - `computeR2Metadata`
 - `transferFile`
 - `getFile`, `getFileByVirtualPath`, `listFilesPage`,
-  `listFilesByAccessKeyPage`, `listAccessKeysPage`,
-  `listDownloadGrantsPage`, `hasAccessKey`
+  `listFilesByAccessKeyPage`, `listAccessKeysPage`, `listDownloadGrantsPage`,
+  `hasAccessKey`
 
-It also exposes `clientApi()` which generates a ready-to-export API surface
-with hooks for auth and side effects.
+It also exposes `clientApi()` which generates a ready-to-export API surface with
+hooks for auth and side effects.
 
 ### 2.14.4 `FilesControlHooks` (hooked API generation)
 
@@ -647,9 +654,9 @@ Hooks you can pass to `clientApi()`:
 These hooks let you implement auth and auditing without writing boilerplate
 wrappers for each component function.
 
---------------------------------------------------------------------------------
-2.15 React hook: `useUploadFile`
---------------------------------------------------------------------------------
+---
+
+## 2.15 React hook: `useUploadFile`
 
 From `src/react/index.ts`:
 
@@ -676,58 +683,61 @@ await uploadFile({ file });
 
 Important details:
 
-- The hook expects API references to your app wrappers, not component
-  functions directly.
+- The hook expects API references to your app wrappers, not component functions
+  directly.
 - For HTTP uploads, you must provide either:
   - `http.uploadUrl` or
   - `http.baseUrl` (+ optional `pathPrefix`).
-- If you pass `authToken`, it sets an `Authorization: Bearer <token>` header
-  on HTTP upload requests.
+- If you pass `authToken`, it sets an `Authorization: Bearer <token>` header on
+  HTTP upload requests.
 
---------------------------------------------------------------------------------
-2.16 Practical limitations, edge cases, and behavior
---------------------------------------------------------------------------------
+---
 
-1) Access keys
+## 2.16 Practical limitations, edge cases, and behavior
+
+1. Access keys
    - Must be non-empty (trimmed).
    - Duplicate access keys are deduplicated.
    - Last access key cannot be removed from a file.
 
-2) Virtual paths
+2. Virtual paths
    - Optional and globally unique across the component.
-   - Best practice: namespace by tenant/user in your app (e.g., `/tenant/<id>/...`).
-   - Keep normalization simple (trim only); avoid `..` and ambiguous paths in app logic.
-   - Uniqueness is enforced at write time but is not race-proof under concurrent uploads.
+   - Best practice: namespace by tenant/user in your app (e.g.,
+     `/tenant/<id>/...`).
+   - Keep normalization simple (trim only); avoid `..` and ambiguous paths in
+     app logic.
+   - Uniqueness is enforced at write time but is not race-proof under concurrent
+     uploads.
 
-3) Upload tokens
+3. Upload tokens
    - Expire after 1 hour (`PENDING_UPLOAD_TTL_MS`).
    - Finalize fails if token missing or expired.
 
-4) File expiration
+4. File expiration
    - `expiresAt` must be in the future.
    - If a file expires, download consumption schedules deletion and returns
      `file_expired`.
 
-5) R2 metadata
+5. R2 metadata
    - For R2 uploads, metadata is not available from Convex system tables.
    - The HTTP route computes metadata by hashing the file.
    - `computeR2Metadata` downloads the entire object, which is expensive for
      large files.
 
-6) Transfer size
+6. Transfer size
    - Transfers buffer the entire file in memory.
 
-7) Shareable links vs. access keys
+7. Shareable links vs. access keys
    - If `shareableLink` is true, the component does not require access keys.
    - The HTTP route can override this with `requireAccessKey: true`.
 
-8) Password handling
+8. Password handling
    - Passwords are hashed; only verification is supported.
    - Avoid passing passwords in query params; prefer headers.
 
---------------------------------------------------------------------------------
-2.17 End-to-end diagrams for common flows
---------------------------------------------------------------------------------
+---
+
+## 2.17 End-to-end diagrams for common flows
 
 ### 2.17.1 Presigned upload with metadata storage in app
 
@@ -791,21 +801,21 @@ sequenceDiagram
   Component->>Storage: delete expired objects (with retries)
 ```
 
---------------------------------------------------------------------------------
-2.18 Recommended integration strategy
---------------------------------------------------------------------------------
+---
 
-1) Mount the component in your app's `convex.config.ts`.
-2) Create app-level wrappers that enforce auth and store your own metadata.
-3) Decide your upload approach:
+## 2.18 Recommended integration strategy
+
+1. Mount the component in your app's `convex.config.ts`.
+2. Create app-level wrappers that enforce auth and store your own metadata.
+3. Decide your upload approach:
    - Presigned URL (client uploads directly)
    - HTTP route (server handles upload)
-4) Schedule cleanup with cron.
-5) If using R2, set env vars or pass config explicitly.
+4. Schedule cleanup with cron.
+5. If using R2, set env vars or pass config explicitly.
 
---------------------------------------------------------------------------------
-2.19 Suggested wrapper patterns (auth + metadata)
---------------------------------------------------------------------------------
+---
+
+## 2.19 Suggested wrapper patterns (auth + metadata)
 
 Recommended structure in your app:
 
@@ -815,15 +825,15 @@ Recommended structure in your app:
   - `createDownloadGrant` mutation (auth + permission checks)
   - `consumeDownloadGrantForUrl` mutation (auth)
 - `convex/http.ts`:
-  - `registerRoutes` with `checkUploadRequest` and `checkDownloadRequest`
-    that pull access keys from your auth system.
+  - `registerRoutes` with `checkUploadRequest` and `checkDownloadRequest` that
+    pull access keys from your auth system.
 
 This keeps business logic in your app while delegating file mechanics to the
 component.
 
---------------------------------------------------------------------------------
-2.20 Testing
---------------------------------------------------------------------------------
+---
+
+## 2.20 Testing
 
 `src/test.ts` provides a helper for `convex-test`:
 
@@ -837,9 +847,9 @@ register(t, "convexFilesControl");
 
 This registers the component and its dependencies for tests.
 
---------------------------------------------------------------------------------
-2.21 Summary: why this component exists
---------------------------------------------------------------------------------
+---
+
+## 2.21 Summary: why this component exists
 
 This component packages a secure and flexible file pipeline:
 
