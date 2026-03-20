@@ -7,7 +7,6 @@ import {
 import { r2EndpointFromAccountId } from "../shared/r2.js";
 import { isStorageProvider } from "../shared/types.js";
 import testHelpers, { register } from "../test.js";
-import * as shared from "../shared.js";
 import schema from "../component/schema.js";
 import actionRetrier from "@convex-dev/action-retrier/test";
 import { __ignore } from "../client/_generated/_ignore.js";
@@ -65,5 +64,4 @@ describe("test helpers", () => {
     expect(testHelpers.schema).toBe(schema);
     expect(testHelpers.modules).toBeTypeOf("object");
   });
-
 });

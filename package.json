@@ -9,7 +9,7 @@
   "bugs": {
     "url": "https://github.com/gilhrpenner/convex-files-control/issues"
   },
-  "version": "0.5.1",
+  "version": "0.5.2",
   "publishConfig": {
     "access": "public"
   },
@@ -79,9 +79,10 @@
     }
   },
   "dependencies": {
-    "@convex-dev/action-retrier": "^0.3.0",
+    "@aws-crypto/sha256-browser": "^5.2.0",
     "@aws-sdk/client-s3": "^3.958.0",
     "@aws-sdk/s3-request-presigner": "^3.958.0",
+    "@convex-dev/action-retrier": "^0.3.0",
     "convex-helpers": "^0.1.108"
   },
   "peerDependencies": {

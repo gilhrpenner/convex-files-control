@@ -1,5 +1,6 @@
 import { ConvexError, v } from "convex/values";
 import { action, mutation, type MutationCtx } from "./_generated/server";
+import { computeResponseSha256Base64 } from "../shared/hash.js";
 import {
   findFileByStorageId,
   findFileByVirtualPath,
@@ -313,27 +314,13 @@ export const computeR2Metadata = action({
       throw new ConvexError("R2 file not found.");
     }
 
-    const buffer = await response.arrayBuffer();
-    const bytes = new Uint8Array(buffer);
-    const digest = await crypto.subtle.digest("SHA-256", bytes);
-    const sha256 = bytesToBase64(new Uint8Array(digest));
+    const { size, sha256 } = await computeResponseSha256Base64(response);
 
     return {
       storageId: args.storageId,
-      size: bytes.byteLength,
+      size,
       sha256,
       contentType: response.headers.get("Content-Type") ?? null,
     };
   },
 });
-
-function bytesToBase64(bytes: Uint8Array): string {
-  if (typeof btoa === "function") {
-    let binary = "";
-    for (const byte of bytes) {
-      binary += String.fromCharCode(byte);
-    }
-    return btoa(binary);
-  }
-  return Buffer.from(bytes).toString("base64");
-}

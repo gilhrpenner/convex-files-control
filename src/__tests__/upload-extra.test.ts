@@ -173,6 +173,46 @@ describe("upload module", () => {
     ).rejects.toThrow("R2 file not found.");
   });
 
+  test("computeR2Metadata hashes streamed bodies without arrayBuffer", async () => {
+    vi.spyOn(r2, "getR2DownloadUrl").mockResolvedValue(
+      "https://r2-download.example.com",
+    );
+
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("da"));
+        controller.enqueue(new TextEncoder().encode("ta"));
+        controller.close();
+      },
+    });
+
+    const arrayBufferSpy = vi.fn(async () => {
+      throw new Error("arrayBuffer should not be used");
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        ({
+          ok: true,
+          body,
+          headers: new Headers({ "Content-Type": "text/plain" }),
+          arrayBuffer: arrayBufferSpy,
+        }) as Response,
+      ),
+    );
+
+    const result = await getHandler(computeR2Metadata)({} as any, {
+      storageId: "storage",
+      r2Config,
+    });
+
+    expect(result.size).toBe(4);
+    expect(result.sha256).toBeTypeOf("string");
+    expect(result.contentType).toBe("text/plain");
+    expect(arrayBufferSpy).not.toHaveBeenCalled();
+  });
+
   test("computeR2Metadata uses Buffer base64 when btoa is missing", async () => {
     vi.stubGlobal("btoa", undefined as any);
     vi.stubGlobal("Buffer", Buffer as any);

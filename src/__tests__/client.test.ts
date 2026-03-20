@@ -475,11 +475,6 @@ describe("registerRoutes", () => {
       }
     }
     vi.stubGlobal("TextDecoder", FakeTextDecoder as any);
-    vi.stubGlobal("crypto", {
-      subtle: {
-        digest: vi.fn(async () => new Uint8Array([1, 2, 3]).buffer),
-      },
-    });
     expect(typeof Buffer).toBe("undefined");
 
     vi.stubGlobal(
@@ -563,11 +558,6 @@ describe("registerRoutes", () => {
       }
     }
     vi.stubGlobal("Response", FakeResponse as any);
-    vi.stubGlobal("crypto", {
-      subtle: {
-        digest: vi.fn(async () => new Uint8Array([1, 2, 3]).buffer),
-      },
-    });
 
     vi.stubGlobal(
       "fetch",
@@ -655,11 +645,6 @@ describe("registerRoutes", () => {
       }
     }
     vi.stubGlobal("TextDecoder", FakeTextDecoder as any);
-    vi.stubGlobal("crypto", {
-      subtle: {
-        digest: vi.fn(async () => new Uint8Array([1, 2, 3]).buffer),
-      },
-    });
 
     vi.stubGlobal(
       "fetch",
@@ -736,11 +721,6 @@ describe("registerRoutes", () => {
       }
     }
     vi.stubGlobal("Response", FakeResponse as any);
-    vi.stubGlobal("crypto", {
-      subtle: {
-        digest: vi.fn(async () => new Uint8Array([1, 2, 3]).buffer),
-      },
-    });
 
     vi.stubGlobal(
       "fetch",
@@ -764,6 +744,71 @@ describe("registerRoutes", () => {
     await expect(handler(ctx, request)).rejects.toThrow(
       "Base64 encoding is not available in this environment.",
     );
+  });
+
+  test("upload route hashes files without reading the full blob into arrayBuffer", async () => {
+    const checkUploadRequest = mockCheckUploadRequest(["a"]);
+    const router = createRouter();
+    registerRoutes(router, component, {
+      enableUploadRoute: true,
+      checkUploadRequest,
+    });
+    const uploadRoute = getRoute(router, "/files/upload", "POST");
+    const handler = getHandler(uploadRoute.handler);
+
+    const uploadUrl = "https://upload.example.com";
+    const uploadToken = "upload-token";
+    const finalizeResult = {
+      storageId: "storage",
+      storageProvider: "convex",
+      expiresAt: null,
+      metadata: null,
+    };
+
+    const runMutation = vi.fn(async (ref) => {
+      if (ref === component.upload.generateUploadUrl) {
+        return {
+          uploadUrl,
+          uploadToken,
+          uploadTokenExpiresAt: Date.now(),
+          storageProvider: "convex",
+          storageId: null,
+        };
+      }
+      if (ref === component.upload.finalizeUpload) {
+        return finalizeResult;
+      }
+      throw new Error("Unexpected mutation");
+    });
+    const ctx = makeCtx(runMutation);
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url) => {
+        if (url === uploadUrl) {
+          return new Response(JSON.stringify({ storageId: "storage" }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        return new Response(null, { status: 404 });
+      }),
+    );
+
+    const file = new File(["file"], "filename", {
+      type: "text/plain",
+    });
+    const arrayBufferSpy = vi
+      .spyOn(file, "arrayBuffer")
+      .mockRejectedValue(new Error("arrayBuffer should not be used"));
+
+    const request = buildUploadRequest({
+      [uploadFormFields.file]: file,
+    });
+
+    const response = await handler(ctx, request);
+    expect(response.status).toBe(200);
+    expect(arrayBufferSpy).not.toHaveBeenCalled();
   });
 
   test("upload route calls onUploadComplete hook", async () => {
