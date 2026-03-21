@@ -3,8 +3,8 @@ import {
   internalMutation,
   mutation,
   type MutationCtx,
-} from "./_generated/server";
-import { internal } from "./_generated/api";
+} from "./_generated/server.js";
+import { internal } from "./_generated/api.js";
 import {
   findFileByStorageId,
   hasAccessKey,
@@ -12,12 +12,12 @@ import {
   normalizeAccessKey,
   toStorageId,
   verifyPassword,
-} from "./lib";
-import type { Id } from "./_generated/dataModel";
-import { deleteFileCascade } from "./cleanUp";
-import { DEFAULT_MAX_DOWNLOAD_USES } from "./constants";
-import { downloadConsumeStatusValidator } from "./validators";
-import { r2ConfigValidator, requireR2Config, getR2DownloadUrl } from "./r2";
+} from "./lib.js";
+import type { Id } from "./_generated/dataModel.js";
+import { deleteFileCascade } from "./cleanUp.js";
+import { DEFAULT_MAX_DOWNLOAD_USES } from "./constants.js";
+import { downloadConsumeStatusValidator } from "./validators.js";
+import { r2ConfigValidator, requireR2Config, getR2DownloadUrl } from "./r2.js";
 
 /**
  * Create a one-time (or multi-use) download token for a file.

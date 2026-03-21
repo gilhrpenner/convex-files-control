@@ -1,6 +1,6 @@
 import { ConvexError, v } from "convex/values";
-import { mutation } from "./_generated/server";
-import { findFileByStorageId, normalizeAccessKey } from "./lib";
+import { mutation } from "./_generated/server.js";
+import { findFileByStorageId, normalizeAccessKey } from "./lib.js";
 
 /**
  * Add an access key to a file, enabling access for a user or tenant.

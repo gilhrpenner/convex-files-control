@@ -6,8 +6,8 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import type { R2Config } from "../shared/types";
-import { r2EndpointFromAccountId } from "../shared/r2";
+import type { R2Config } from "../shared/types.js";
+import { r2EndpointFromAccountId } from "../shared/r2.js";
 
 export const r2ConfigValidator = v.object({
   accountId: v.string(),
