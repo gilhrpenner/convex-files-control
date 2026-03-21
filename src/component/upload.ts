@@ -1,5 +1,5 @@
 import { ConvexError, v } from "convex/values";
-import { action, mutation, type MutationCtx } from "./_generated/server";
+import { action, mutation, type MutationCtx } from "./_generated/server.js";
 import { computeResponseSha256Base64 } from "../shared/hash.js";
 import {
   findFileByStorageId,
@@ -7,19 +7,19 @@ import {
   normalizeAccessKeys,
   normalizeVirtualPath,
   toStorageId,
-} from "./lib";
-import { PENDING_UPLOAD_TTL_MS } from "./constants";
+} from "./lib.js";
+import { PENDING_UPLOAD_TTL_MS } from "./constants.js";
 import {
   fileMetadataInputValidator,
   fileMetadataValidator,
-} from "./validators";
-import { storageProviderValidator } from "./storageProvider";
+} from "./validators.js";
+import { storageProviderValidator } from "./storageProvider.js";
 import {
   getR2UploadUrl,
   getR2DownloadUrl,
   r2ConfigValidator,
   requireR2Config,
-} from "./r2";
+} from "./r2.js";
 
 /**
  * Start the two-step upload flow by issuing a signed upload URL.

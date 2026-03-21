@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.5.2 (2026-03-20)
+
+### Fixes
+
+- **esm**: Fix published ESM entrypoints and internal runtime modules to use
+  explicit `.js` relative imports, including the shared hash export path used
+  by streaming hash support, so the package loads correctly in strict ESM
+  environments such as Node.js and Vitest.
+- **build**: Enforce Node-style module resolution for the publish build and
+  validate built `dist` entrypoints before release to prevent ESM packaging
+  regressions.
+
+---
+
 ## 0.5.1 (2026-01-02)
 
 ### Features

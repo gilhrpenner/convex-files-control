@@ -1,19 +1,19 @@
 import { paginator } from "convex-helpers/server/pagination";
 import { paginationOptsValidator, paginationResultValidator } from "convex/server";
 import { v } from "convex/values";
-import { query } from "./_generated/server";
+import { query } from "./_generated/server.js";
 import {
   hasAccessKey as hasAccessKeyForFile,
   normalizeAccessKey,
   normalizeVirtualPath,
-} from "./lib";
-import schema from "./schema";
+} from "./lib.js";
+import schema from "./schema.js";
 import {
   downloadGrantSummaryValidator,
   fileSummaryValidator,
   toDownloadGrantSummary,
   toFileSummary,
-} from "./validators";
+} from "./validators.js";
 
 /**
  * List files in storage with cursor-based pagination.

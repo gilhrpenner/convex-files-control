@@ -5,26 +5,26 @@ import {
   internalMutation,
   internalQuery,
   type MutationCtx,
-} from "./_generated/server";
-import type { Id } from "./_generated/dataModel";
-import { api, components, internal } from "./_generated/api";
+} from "./_generated/server.js";
+import type { Id } from "./_generated/dataModel.js";
+import { api, components, internal } from "./_generated/api.js";
 import { ActionRetrier } from "@convex-dev/action-retrier";
 import {
   findFileByStorageId,
   findFileByVirtualPath,
   normalizeVirtualPath,
   toStorageId,
-} from "./lib";
-import { storageProviderValidator } from "./storageProvider";
+} from "./lib.js";
+import { storageProviderValidator } from "./storageProvider.js";
 import {
   createR2Client,
   deleteR2Object,
   getR2DownloadUrl,
   r2ConfigValidator,
   requireR2Config,
-} from "./r2";
+} from "./r2.js";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
-import type { R2Config, StorageProvider } from "../shared/types";
+import type { R2Config, StorageProvider } from "../shared/types.js";
 
 type TransferFileRecord = {
   _id: Id<"files">;

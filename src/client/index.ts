@@ -21,8 +21,8 @@ import {
   fileMetadataInputValidator,
   fileMetadataValidator,
   fileSummaryValidator,
-} from "../component/validators";
-import { storageProviderValidator } from "../component/storageProvider";
+} from "../component/validators.js";
+import { storageProviderValidator } from "../component/storageProvider.js";
 import {
   DEFAULT_PATH_PREFIX,
   buildEndpointUrl,
@@ -31,8 +31,12 @@ import {
   normalizeBaseUrl,
   normalizePathPrefix,
   uploadFormFields,
-} from "../shared";
-import type { R2Config, StorageProvider, UploadResult } from "../shared/types";
+} from "../shared.js";
+import type {
+  R2Config,
+  StorageProvider,
+  UploadResult,
+} from "../shared/types.js";
 import {
   corsResponse,
   jsonError,
@@ -41,10 +45,10 @@ import {
   sanitizeFilename,
   statusCodeForDownloadError,
   corsHeaders,
-} from "./http";
+} from "./http.js";
 
 export { uploadFormFields };
-export type { StorageProvider, R2Config } from "../shared/types";
+export type { StorageProvider, R2Config } from "../shared/types.js";
 
 export type R2ConfigInput = {
   accountId?: string;

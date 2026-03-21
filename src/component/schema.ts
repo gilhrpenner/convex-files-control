@@ -1,6 +1,6 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
-import { storageProviderValidator } from "./storageProvider";
+import { storageProviderValidator } from "./storageProvider.js";
 
 export default defineSchema({
   files: defineTable({
