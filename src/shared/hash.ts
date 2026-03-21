@@ -1,4 +1,4 @@
-import { Sha256 } from "@aws-crypto/sha256-browser";
+import { Sha256 } from "@aws-crypto/sha256-js";
 
 type ByteStream = AsyncIterable<Uint8Array> | ReadableStream<Uint8Array>;
 
