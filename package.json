@@ -9,7 +9,7 @@
   "bugs": {
     "url": "https://github.com/gilhrpenner/convex-files-control/issues"
   },
-  "version": "0.5.1",
+  "version": "0.5.2",
   "publishConfig": {
     "access": "public"
   },
@@ -33,6 +33,7 @@
     "build": "tsc --project ./tsconfig.build.json",
     "build:codegen": "npx convex codegen --component-dir ./src/component && npm run build",
     "build:clean": "rm -rf dist *.tsbuildinfo && npm run build:codegen",
+    "verify:dist-esm": "node ./scripts/check-dist-esm.mjs",
     "typecheck": "tsc --noEmit",
     "typecheck:all": "tsc --noEmit && tsc -p example && tsc -p example/convex",
     "lint": "eslint src/",
@@ -41,12 +42,12 @@
     "test:watch": "vitest --typecheck --clearScreen false",
     "test:debug": "vitest --inspect-brk --no-file-parallelism",
     "test:coverage": "vitest run --coverage --coverage.reporter=text",
-    "preversion": "npm ci && npm run build:clean && run-p test lint typecheck",
-    "prepublishOnly": "npm run build:clean",
+    "preversion": "npm ci && npm run build:clean && run-p test lint typecheck verify:dist-esm",
+    "prepublishOnly": "npm run build:clean && npm run verify:dist-esm",
     "alpha": "npm version prerelease --preid alpha && npm publish --tag alpha && git push --follow-tags",
     "release": "npm version patch && npm publish && git push --follow-tags",
     "version": "vim -c 'normal o' -c 'normal o## '$npm_package_version CHANGELOG.md && prettier -w CHANGELOG.md && git add CHANGELOG.md",
-    "check": "npm run build:clean && npm run typecheck && npm run lint && npm run test"
+    "check": "npm run build:clean && npm run typecheck && npm run lint && npm run test && npm run verify:dist-esm"
   },
   "files": [
     "dist",
@@ -79,28 +80,29 @@
     }
   },
   "dependencies": {
+    "@aws-crypto/sha256-js": "^5.2.0",
+    "@aws-sdk/client-s3": "^3.1014.0",
+    "@aws-sdk/s3-request-presigner": "^3.1014.0",
     "@convex-dev/action-retrier": "^0.3.0",
-    "@aws-sdk/client-s3": "^3.958.0",
-    "@aws-sdk/s3-request-presigner": "^3.958.0",
-    "convex-helpers": "^0.1.108"
+    "convex-helpers": "^0.1.114"
   },
   "peerDependencies": {
     "convex": "^1.29.3",
     "react": "^18.3.1 || ^19.0.0"
   },
   "devDependencies": {
-    "@convex-dev/eslint-plugin": "^1.1.1",
+    "@convex-dev/eslint-plugin": "^1.2.1",
     "@edge-runtime/vm": "^5.0.0",
-    "@eslint/eslintrc": "^3.3.3",
+    "@eslint/eslintrc": "^3.3.5",
     "@eslint/js": "9.39.2",
-    "@types/node": "^24.10.4",
-    "@types/react": "^19.2.7",
+    "@types/node": "^24.12.0",
+    "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^5.1.2",
-    "@vitest/coverage-v8": "^4.0.16",
+    "@vitejs/plugin-react": "^5.2.0",
+    "@vitest/coverage-v8": "^4.1.0",
     "chokidar-cli": "3.0.0",
-    "convex": "1.31.2",
-    "convex-test": "0.0.41",
+    "convex": "1.34.0",
+    "convex-test": "0.0.43",
     "cpy-cli": "^6.0.0",
     "eslint": "9.39.2",
     "eslint-plugin-react": "^7.37.5",
@@ -109,14 +111,14 @@
     "globals": "^16.5.0",
     "npm-run-all2": "8.0.4",
     "path-exists-cli": "2.0.0",
-    "pkg-pr-new": "^0.0.62",
-    "prettier": "3.7.4",
-    "react": "^19.2.3",
-    "react-dom": "^19.2.3",
+    "pkg-pr-new": "^0.0.66",
+    "prettier": "3.8.1",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
     "typescript": "5.9.3",
-    "typescript-eslint": "8.50.1",
+    "typescript-eslint": "8.57.1",
     "vite": "7.3.0",
-    "vitest": "4.0.16"
+    "vitest": "4.1.0"
   },
   "types": "./dist/client/index.d.ts",
   "module": "./dist/client/index.js"

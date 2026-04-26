@@ -1,17 +1,17 @@
 import { v } from "convex/values";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc } from "./_generated/dataModel.js";
 import {
   action,
   internalMutation,
   mutation,
   type MutationCtx,
-} from "./_generated/server";
-import { api, components, internal } from "./_generated/api";
-import { findFileByStorageId, toStorageId } from "./lib";
-import { DEFAULT_CLEANUP_LIMIT } from "./constants";
+} from "./_generated/server.js";
+import { api, components, internal } from "./_generated/api.js";
+import { findFileByStorageId, toStorageId } from "./lib.js";
+import { DEFAULT_CLEANUP_LIMIT } from "./constants.js";
 import { ActionRetrier } from "@convex-dev/action-retrier";
-import { storageProviderValidator } from "./storageProvider";
-import { deleteR2Object, r2ConfigValidator, requireR2Config } from "./r2";
+import { storageProviderValidator } from "./storageProvider.js";
+import { deleteR2Object, r2ConfigValidator, requireR2Config } from "./r2.js";
 
 const retrier = new ActionRetrier(components.actionRetrier);
 

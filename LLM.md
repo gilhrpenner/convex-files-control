@@ -720,9 +720,11 @@ Important details:
 
 5. R2 metadata
    - For R2 uploads, metadata is not available from Convex system tables.
-   - The HTTP route computes metadata by hashing the file.
-   - `computeR2Metadata` downloads the entire object, which is expensive for
-     large files.
+   - The HTTP route computes metadata by streaming the uploaded file through a
+     SHA-256 hasher, avoiding an extra full-buffer copy in memory.
+   - `computeR2Metadata` still downloads the entire object in order to hash it,
+     but the hash computation itself streams the body instead of buffering the
+     whole object first.
 
 6. Transfer size
    - Transfers buffer the entire file in memory.

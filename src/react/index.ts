@@ -7,11 +7,11 @@ import {
   DEFAULT_PATH_PREFIX,
   buildEndpointUrl,
   uploadFormFields,
-} from "../shared";
-import type { StorageProvider, UploadResult } from "../shared";
+} from "../shared.js";
+import type { StorageProvider, UploadResult } from "../shared.js";
 
 export type UploadMethod = "presigned" | "http";
-export type { UploadMetadata, UploadResult } from "../shared";
+export type { UploadMetadata, UploadResult } from "../shared.js";
 
 export type HttpUploadOptions = {
   uploadUrl?: string;

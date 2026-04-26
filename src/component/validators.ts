@@ -1,7 +1,7 @@
 import { v } from "convex/values";
-import type { Doc, Id } from "./_generated/dataModel";
-import schema from "./schema";
-import { storageProviderValidator } from "./storageProvider";
+import type { Doc, Id } from "./_generated/dataModel.js";
+import schema from "./schema.js";
+import { storageProviderValidator } from "./storageProvider.js";
 
 const downloadGrantFields = schema.tables.downloadGrants.validator.fields;
 

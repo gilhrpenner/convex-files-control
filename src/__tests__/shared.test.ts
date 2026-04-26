@@ -4,10 +4,10 @@ import {
   normalizeBaseUrl,
   normalizePathPrefix,
 } from "../shared/urls.js";
+import { computeSha256Base64 } from "../shared/hash.js";
 import { r2EndpointFromAccountId } from "../shared/r2.js";
 import { isStorageProvider } from "../shared/types.js";
 import testHelpers, { register } from "../test.js";
-import * as shared from "../shared.js";
 import schema from "../component/schema.js";
 import actionRetrier from "@convex-dev/action-retrier/test";
 import { __ignore } from "../client/_generated/_ignore.js";
@@ -43,6 +43,57 @@ describe("shared helpers", () => {
     expect(isStorageProvider("r2")).toBe(true);
     expect(isStorageProvider("other")).toBe(false);
   });
+
+  test("computeSha256Base64 stays incremental when webcrypto globals exist", async () => {
+    const digestSpy = vi.fn(async () => new Uint8Array(32).buffer);
+    const originalSelf = (globalThis as Record<string, unknown>).self;
+
+    Object.defineProperty(globalThis, "self", {
+      configurable: true,
+      writable: true,
+      value: {
+        crypto: {
+          getRandomValues: (value: Uint8Array) => value,
+          subtle: {
+            decrypt() {},
+            digest: digestSpy,
+            encrypt() {},
+            exportKey() {},
+            generateKey() {},
+            importKey() {},
+            sign() {},
+            verify() {},
+          },
+        },
+      },
+    });
+
+    try {
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode("da"));
+          controller.enqueue(new TextEncoder().encode("ta"));
+          controller.close();
+        },
+      });
+
+      await expect(computeSha256Base64(stream)).resolves.toEqual({
+        size: 4,
+        sha256: "Om6weQ85rIfJTzhWst0sXREOaBFgImGpqSPTuyOtyLc=",
+      });
+      expect(digestSpy).not.toHaveBeenCalled();
+    } finally {
+      if (originalSelf === undefined) {
+        delete (globalThis as Record<string, unknown>).self;
+      } else {
+        Object.defineProperty(globalThis, "self", {
+          configurable: true,
+          writable: true,
+          value: originalSelf,
+        });
+      }
+    }
+  });
 });
 
 describe("test helpers", () => {
@@ -65,5 +116,4 @@ describe("test helpers", () => {
     expect(testHelpers.schema).toBe(schema);
     expect(testHelpers.modules).toBeTypeOf("object");
   });
-
 });
