@@ -66,6 +66,9 @@ describe("shared r2 endpoint", () => {
     expect(r2EndpointFromAccountId("acct")).toBe(
       "https://acct.r2.cloudflarestorage.com",
     );
+    expect(r2EndpointFromAccountId("acct", " EU ")).toBe(
+      "https://acct.eu.r2.cloudflarestorage.com",
+    );
   });
 });
 
@@ -97,6 +100,19 @@ describe("component r2 helpers", () => {
       accessKeyId: "access",
       secretAccessKey: "secret",
     });
+    expect((client as any).config.forcePathStyle).toBe(false);
+  });
+
+  test("createR2Client configures jurisdiction endpoint with path-style URLs", () => {
+    const client = createR2Client({
+      ...config,
+      jurisdiction: "eu",
+    }) as unknown as S3Client;
+
+    expect((client as any).config.endpoint).toBe(
+      "https://acct.eu.r2.cloudflarestorage.com",
+    );
+    expect((client as any).config.forcePathStyle).toBe(true);
   });
 
   test("getR2UploadUrl and getR2DownloadUrl use signed urls", async () => {

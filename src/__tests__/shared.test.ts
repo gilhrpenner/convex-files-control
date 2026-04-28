@@ -36,6 +36,9 @@ describe("shared helpers", () => {
     expect(r2EndpointFromAccountId("abc123")).toBe(
       "https://abc123.r2.cloudflarestorage.com",
     );
+    expect(r2EndpointFromAccountId("abc123", "FEDRAMP")).toBe(
+      "https://abc123.fedramp.r2.cloudflarestorage.com",
+    );
   });
 
   test("isStorageProvider validates providers", () => {
