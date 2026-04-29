@@ -331,7 +331,7 @@ import { FilesControl } from "@gilhrpenner/convex-files-control";
 import { components } from "./_generated/api";
 
 const files = new FilesControl(components.convexFilesControl, {
-  // r2: { accountId, accessKeyId, secretAccessKey, bucketName },
+  // r2: { accountId, accessKeyId, secretAccessKey, bucketName, jurisdiction },
 });
 
 await files.generateUploadUrl(ctx, { provider: "convex" });
@@ -351,6 +351,12 @@ the HTTP routes:
 - `R2_ACCESS_KEY_ID`
 - `R2_SECRET_ACCESS_KEY`
 - `R2_BUCKET_NAME`
+- `R2_JURISDICTION` (optional, for example `eu` or `fedramp`)
+
+Set `R2_JURISDICTION` only when your bucket was created with a Cloudflare R2
+jurisdiction. See Cloudflare's
+[data location docs](https://developers.cloudflare.com/r2/reference/data-location/#using-jurisdictions-with-the-s3-api)
+for the supported jurisdiction values and S3 endpoint format.
 
 ## Transfer between providers
 

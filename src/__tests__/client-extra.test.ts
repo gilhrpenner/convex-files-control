@@ -220,6 +220,7 @@ describe("registerRoutes extra coverage", () => {
     process.env.R2_ACCESS_KEY_ID = "access";
     process.env.R2_SECRET_ACCESS_KEY = "secret";
     process.env.R2_BUCKET_NAME = "bucket";
+    process.env.R2_JURISDICTION = "eu";
 
     const router = createRouter();
     registerRoutes(router, component, {
@@ -253,6 +254,7 @@ describe("registerRoutes extra coverage", () => {
           accessKeyId: "access",
           secretAccessKey: "secret",
           bucketName: "bucket",
+          jurisdiction: "eu",
         },
       },
     );
@@ -261,6 +263,7 @@ describe("registerRoutes extra coverage", () => {
     delete process.env.R2_ACCESS_KEY_ID;
     delete process.env.R2_SECRET_ACCESS_KEY;
     delete process.env.R2_BUCKET_NAME;
+    delete process.env.R2_JURISDICTION;
   });
 
   test("upload route rejects invalid checkUploadRequest results", async () => {
@@ -784,6 +787,36 @@ describe("FilesControl class and clientApi", () => {
       filesPartial.generateUploadUrl(ctx, { provider: "r2" }),
     ).rejects.toThrow(
       "R2 configuration is missing required fields for R2 uploads. Missing: R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME",
+    );
+  });
+
+  test("FilesControl treats R2 jurisdiction as optional", async () => {
+    const runMutation = buildMutationMocks();
+    const runAction = buildActionMocks();
+    const runQuery = buildQueryMocks();
+    const ctx = makeCtx(runMutation, runQuery, runAction);
+
+    const files = new FilesControl(component, {
+      r2: {
+        accountId: "acct",
+        accessKeyId: "access",
+        secretAccessKey: "secret",
+        bucketName: "bucket",
+      },
+    });
+
+    await files.generateUploadUrl(ctx, { provider: "r2" });
+
+    expect(runMutation).toHaveBeenCalledWith(
+      component.upload.generateUploadUrl,
+      expect.objectContaining({
+        r2Config: {
+          accountId: "acct",
+          accessKeyId: "access",
+          secretAccessKey: "secret",
+          bucketName: "bucket",
+        },
+      }),
     );
   });
 

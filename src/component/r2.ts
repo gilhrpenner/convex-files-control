@@ -14,6 +14,7 @@ export const r2ConfigValidator = v.object({
   accessKeyId: v.string(),
   secretAccessKey: v.string(),
   bucketName: v.string(),
+  jurisdiction: v.optional(v.string()),
 });
 
 export function requireR2Config(
@@ -30,7 +31,8 @@ export function requireR2Config(
 export function createR2Client(config: R2Config) {
   return new S3Client({
     region: "auto",
-    endpoint: r2EndpointFromAccountId(config.accountId),
+    endpoint: r2EndpointFromAccountId(config.accountId, config.jurisdiction),
+    forcePathStyle: Boolean(config.jurisdiction?.trim()),
     credentials: {
       accessKeyId: config.accessKeyId,
       secretAccessKey: config.secretAccessKey,

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.3 (2026-04-28)
+
+### Features
+
+- **r2**: Add optional R2 jurisdiction support via `jurisdiction` or
+  `R2_JURISDICTION`, enabling jurisdictional bucket endpoints such as EU R2
+  buckets. Thanks @FleetAdmiralJakob for the report and initial patch.
+
+---
+
 ## 0.5.2 (2026-03-20)
 
 ### Fixes

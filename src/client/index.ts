@@ -55,29 +55,41 @@ export type R2ConfigInput = {
   accessKeyId?: string;
   secretAccessKey?: string;
   bucketName?: string;
+  jurisdiction?: string;
 };
 
-const R2_ENV_VARS: Record<keyof R2Config, string> = {
+const REQUIRED_R2_ENV_VARS = {
   accountId: "R2_ACCOUNT_ID",
   accessKeyId: "R2_ACCESS_KEY_ID",
   secretAccessKey: "R2_SECRET_ACCESS_KEY",
   bucketName: "R2_BUCKET_NAME",
-};
+} satisfies Record<keyof Omit<R2Config, "jurisdiction">, string>;
+
+const OPTIONAL_R2_ENV_VARS = {
+  jurisdiction: "R2_JURISDICTION",
+} satisfies Record<"jurisdiction", string>;
 
 const readEnv = (key: string) =>
   typeof process !== "undefined" ? process.env[key] : undefined;
 
 const resolveR2Config = (input?: R2ConfigInput): R2Config | null => {
   const config = {
-    accountId: input?.accountId ?? readEnv(R2_ENV_VARS.accountId),
-    accessKeyId: input?.accessKeyId ?? readEnv(R2_ENV_VARS.accessKeyId),
+    accountId: input?.accountId ?? readEnv(REQUIRED_R2_ENV_VARS.accountId),
+    accessKeyId:
+      input?.accessKeyId ?? readEnv(REQUIRED_R2_ENV_VARS.accessKeyId),
     secretAccessKey:
-      input?.secretAccessKey ?? readEnv(R2_ENV_VARS.secretAccessKey),
-    bucketName: input?.bucketName ?? readEnv(R2_ENV_VARS.bucketName),
+      input?.secretAccessKey ??
+      readEnv(REQUIRED_R2_ENV_VARS.secretAccessKey),
+    bucketName: input?.bucketName ?? readEnv(REQUIRED_R2_ENV_VARS.bucketName),
+    jurisdiction:
+      input?.jurisdiction ?? readEnv(OPTIONAL_R2_ENV_VARS.jurisdiction),
   };
 
-  const hasAll = Object.values(config).every((value) => Boolean(value));
-  if (!hasAll) {
+  const hasAllRequired = Object.keys(REQUIRED_R2_ENV_VARS).every((key) => {
+    const field = key as keyof typeof REQUIRED_R2_ENV_VARS;
+    return Boolean(config[field]);
+  });
+  if (!hasAllRequired) {
     return null;
   }
 
@@ -90,10 +102,10 @@ const requireR2Config = (input?: R2ConfigInput, context?: string): R2Config => {
     return config;
   }
 
-  const missing = Object.entries(R2_ENV_VARS)
+  const missing = Object.entries(REQUIRED_R2_ENV_VARS)
     .filter(([key]) => {
-      const field = key as keyof R2Config;
-      const value = input?.[field] ?? readEnv(R2_ENV_VARS[field]);
+      const field = key as keyof typeof REQUIRED_R2_ENV_VARS;
+      const value = input?.[field] ?? readEnv(REQUIRED_R2_ENV_VARS[field]);
       return !value;
     })
     .map(([, envVar]) => envVar);

@@ -5,6 +5,7 @@ export type R2Config = {
   accessKeyId: string;
   secretAccessKey: string;
   bucketName: string;
+  jurisdiction?: string;
 };
 
 export type UploadMetadata = {
