@@ -56,6 +56,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             accessKeyId: string;
             accountId: string;
             bucketName: string;
+            jurisdiction?: string;
             secretAccessKey: string;
           };
         },
@@ -70,6 +71,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             accessKeyId: string;
             accountId: string;
             bucketName: string;
+            jurisdiction?: string;
             secretAccessKey: string;
           };
           storageId: string;
@@ -85,6 +87,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             accessKeyId: string;
             accountId: string;
             bucketName: string;
+            jurisdiction?: string;
             secretAccessKey: string;
           };
           storageId: string;
@@ -106,6 +109,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             accessKeyId: string;
             accountId: string;
             bucketName: string;
+            jurisdiction?: string;
             secretAccessKey: string;
           };
         },
@@ -297,6 +301,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             accessKeyId: string;
             accountId: string;
             bucketName: string;
+            jurisdiction?: string;
             secretAccessKey: string;
           };
           storageId: string;
@@ -320,6 +325,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             accessKeyId: string;
             accountId: string;
             bucketName: string;
+            jurisdiction?: string;
             secretAccessKey: string;
           };
           storageId: string;
@@ -370,6 +376,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             accessKeyId: string;
             accountId: string;
             bucketName: string;
+            jurisdiction?: string;
             secretAccessKey: string;
           };
           virtualPath?: string;
