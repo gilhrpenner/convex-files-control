@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.4 (2026-05-22)
+
+### Chores
+
+- Refresh package dependencies, including AWS SDK S3 packages, Convex helpers,
+  React dev dependencies, Vitest, Prettier, and package publishing tooling.
+- Apply dependency security updates for Vite and transitive packages reported
+  by Dependabot, with a temporary `ws` override while Convex still pins the
+  vulnerable release.
+
+---
+
 ## 0.5.3 (2026-04-28)
 
 ### Features
