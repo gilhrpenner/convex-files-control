@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.5 (2026-06-02)
+
+### Chores
+
+- Bump Convex to 1.40.0 and align example dependencies so local dev typechecks
+  against the same Convex and React versions.
+
+---
+
 ## 0.5.4 (2026-05-22)
 
 ### Chores
