@@ -624,11 +624,11 @@ export type ClientApi = ApiFromModules<{
 }>["client"];
 
 type RunQueryCtx = {
-  runQuery: GenericQueryCtx<GenericDataModel>["runQuery"];
+  runQuery: GenericActionCtx<GenericDataModel>["runQuery"];
 };
 
 type RunMutationCtx = {
-  runMutation: GenericMutationCtx<GenericDataModel>["runMutation"];
+  runMutation: GenericActionCtx<GenericDataModel>["runMutation"];
 };
 
 type RunActionCtx = {

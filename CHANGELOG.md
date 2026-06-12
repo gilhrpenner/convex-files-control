@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.6 (2026-06-12)
+
+### Fixes
+
+- **types**: Accept Convex action contexts in `FilesControl` query and mutation
+  helpers with Convex 1.41.0 by typing helper contexts against the shared
+  action `runQuery`/`runMutation` signatures.
+- **tests**: Add server context type coverage and bump the Convex dev dependency
+  to 1.41.0 so local checks exercise the updated Convex ctx signatures.
+
+---
+
 ## 0.5.5 (2026-06-02)
 
 ### Chores
