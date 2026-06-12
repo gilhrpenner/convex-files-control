@@ -10,6 +10,11 @@
 - **tests**: Add server context type coverage and bump the Convex dev dependency
   to 1.41.0 so local checks exercise the updated Convex ctx signatures.
 
+### Chores
+
+- **deps**: Refresh the Vite dev dependency tree to pick up the latest
+  `shell-quote` security fix.
+
 ---
 
 ## 0.5.5 (2026-06-02)
