@@ -15,7 +15,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@auth/core": "^0.37.4",
+    "@auth/core": "^0.41.3",
     "@convex-dev/auth": "^0.0.90",
     "@gilhrpenner/convex-files-control": "file:..",
     "@hookform/resolvers": "^5.2.2",
