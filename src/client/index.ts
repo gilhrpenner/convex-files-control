@@ -896,9 +896,14 @@ export class FilesControl {
 
   async deleteFile(
     ctx: RunMutationCtx,
-    args: { storageId: string; r2Config?: R2Config },
+    args: {
+      storageId: string;
+      deleteStorage?: boolean;
+      r2Config?: R2Config;
+    },
   ) {
     return ctx.runMutation(this.component.cleanUp.deleteFile, {
+      deleteStorage: args.deleteStorage,
       storageId: args.storageId,
       r2Config: this.maybeR2Config(args.r2Config),
     });

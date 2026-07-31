@@ -88,6 +88,7 @@ async function deleteFileCascadeCore(
     secretAccessKey: string;
     bucketName: string;
   },
+  deleteStorage = true,
 ) {
   const storageId = file.storageId;
   const [accessRows, grants] = await Promise.all([
@@ -103,11 +104,12 @@ async function deleteFileCascadeCore(
 
   await Promise.all([
     ctx.db.delete(file._id),
-    deleteStorageFileWithRetry(ctx, {
-      storageId,
-      storageProvider: file.storageProvider,
-      r2Config,
-    }),
+    deleteStorage &&
+      deleteStorageFileWithRetry(ctx, {
+        storageId,
+        storageProvider: file.storageProvider,
+        r2Config,
+      }),
     ...accessRows.map((row) => ctx.db.delete(row._id)),
     ...grants.map((grant) => ctx.db.delete(grant._id)),
   ]);
@@ -137,6 +139,7 @@ export async function deleteFileCascade(
  * Removes access key mappings, download grants, and the storage object.
  *
  * @param args.storageId - The file's storage ID.
+ * @param args.deleteStorage - Whether the component also owns and deletes the storage object.
  * @returns `{ deleted: true }` if the file existed and was removed.
  *
  * @example
@@ -148,6 +151,7 @@ export async function deleteFileCascade(
  */
 export const deleteFile = mutation({
   args: {
+    deleteStorage: v.optional(v.boolean()),
     storageId: v.string(),
     r2Config: v.optional(r2ConfigValidator),
   },
@@ -160,7 +164,12 @@ export const deleteFile = mutation({
       return { deleted: false };
     }
 
-    await deleteFileCascadeCore(ctx, file, args.r2Config);
+    await deleteFileCascadeCore(
+      ctx,
+      file,
+      args.r2Config,
+      args.deleteStorage ?? true,
+    );
     return { deleted: true };
   },
 });

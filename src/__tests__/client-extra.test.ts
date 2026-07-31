@@ -672,6 +672,20 @@ describe("FilesControl class and clientApi", () => {
     );
 
     await files.deleteFile(ctx, { storageId: "storage" });
+    expect(runMutation).toHaveBeenCalledWith(component.cleanUp.deleteFile, {
+      deleteStorage: undefined,
+      storageId: "storage",
+      r2Config,
+    });
+    await files.deleteFile(ctx, {
+      storageId: "storage",
+      deleteStorage: false,
+    });
+    expect(runMutation).toHaveBeenCalledWith(component.cleanUp.deleteFile, {
+      deleteStorage: false,
+      storageId: "storage",
+      r2Config,
+    });
     await files.deleteFile(ctx, { storageId: "storage", r2Config });
     await files.cleanupExpired(ctx, { limit: 5 });
     await files.cleanupExpired(ctx, {});

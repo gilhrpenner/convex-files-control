@@ -963,6 +963,29 @@ describe("cleanUp", () => {
     });
 
     expect(deleted).toEqual({ deleted: true });
+
+    const { storageId: retainedStorage } = await createStorageFile(
+      t,
+      "retain-storage",
+    );
+    await t.mutation(api.upload.registerFile, {
+      storageId: retainedStorage,
+      storageProvider: "convex",
+      accessKeys: ["k"],
+    });
+
+    expect(
+      await t.mutation(api.cleanUp.deleteFile, {
+        storageId: retainedStorage,
+        deleteStorage: false,
+      }),
+    ).toEqual({ deleted: true });
+    expect(
+      await t.run(async (ctx) => await ctx.storage.getUrl(retainedStorage)),
+    ).toBeTypeOf("string");
+    expect(
+      await t.query(api.queries.getFile, { storageId: retainedStorage }),
+    ).toBeNull();
   });
 
   test("deleteStorageFile action deletes convex and r2", async () => {
