@@ -67,6 +67,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         "mutation",
         "internal",
         {
+          deleteStorage?: boolean;
           r2Config?: {
             accessKeyId: string;
             accountId: string;

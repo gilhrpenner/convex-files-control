@@ -963,6 +963,29 @@ describe("cleanUp", () => {
     });
 
     expect(deleted).toEqual({ deleted: true });
+
+    const { storageId: retainedStorage } = await createStorageFile(
+      t,
+      "retain-storage",
+    );
+    await t.mutation(api.upload.registerFile, {
+      storageId: retainedStorage,
+      storageProvider: "convex",
+      accessKeys: ["k"],
+    });
+
+    expect(
+      await t.mutation(api.cleanUp.deleteFile, {
+        storageId: retainedStorage,
+        deleteStorage: false,
+      }),
+    ).toEqual({ deleted: true });
+    expect(
+      await t.run(async (ctx) => await ctx.storage.getUrl(retainedStorage)),
+    ).toBeTypeOf("string");
+    expect(
+      await t.query(api.queries.getFile, { storageId: retainedStorage }),
+    ).toBeNull();
   });
 
   test("deleteStorageFile action deletes convex and r2", async () => {
@@ -1018,6 +1041,46 @@ describe("cleanUp", () => {
 
     expect(deleted).toEqual({ deleted: true });
     expect(r2Spy).toHaveBeenCalledWith(r2Config, storageId);
+  });
+
+  test("deleteFile retains host-owned r2 storage and removes records", async () => {
+    const t = initConvexTest();
+    const storageId = "r2-retain";
+    const fileId = await insertFileRecord(t, storageId, undefined, "r2");
+    await insertFileAccess(t, fileId, storageId, "key");
+    await insertDownloadGrant(t, {
+      storageId,
+      maxUses: null,
+      useCount: 0,
+    });
+
+    const r2Spy = vi.spyOn(r2, "deleteR2Object").mockResolvedValue(undefined);
+    r2Spy.mockClear();
+
+    expect(
+      await t.mutation(api.cleanUp.deleteFile, {
+        storageId,
+        deleteStorage: false,
+      }),
+    ).toEqual({ deleted: true });
+    expect(r2Spy).not.toHaveBeenCalled();
+
+    const remaining = await t.run(async (ctx) => ({
+      file: await ctx.db
+        .query("files")
+        .withIndex("by_storageId", (q) => q.eq("storageId", storageId))
+        .unique(),
+      accessRows: await ctx.db
+        .query("fileAccess")
+        .withIndex("by_storageId", (q) => q.eq("storageId", storageId))
+        .collect(),
+      grants: await ctx.db
+        .query("downloadGrants")
+        .withIndex("by_storageId", (q) => q.eq("storageId", storageId))
+        .collect(),
+    }));
+
+    expect(remaining).toEqual({ file: null, accessRows: [], grants: [] });
   });
 
   test("cleanupExpired deletes expired records", async () => {

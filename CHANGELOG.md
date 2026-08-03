@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.5.7 (2026-08-02)
+
+### Features
+
+- **cleanup**: Allow callers with host-owned blob lifecycles to pass
+  `deleteStorage: false` when deleting a file, removing the component's file
+  registration, access rows, and download grants while retaining the underlying
+  Convex or R2 storage object. Thanks @seanaguinaga for the contribution.
+
+### Tests
+
+- **cleanup**: Cover retained Convex and R2 storage while verifying related
+  component records are removed.
+
+### Chores
+
+- **deps**: Refresh `js-yaml`, `postcss`, and the example app's `@auth/core`
+  dependency through Dependabot updates.
+
+---
+
 ## 0.5.6 (2026-06-12)
 
 ### Fixes
