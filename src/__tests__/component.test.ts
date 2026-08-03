@@ -1043,6 +1043,46 @@ describe("cleanUp", () => {
     expect(r2Spy).toHaveBeenCalledWith(r2Config, storageId);
   });
 
+  test("deleteFile retains host-owned r2 storage and removes records", async () => {
+    const t = initConvexTest();
+    const storageId = "r2-retain";
+    const fileId = await insertFileRecord(t, storageId, undefined, "r2");
+    await insertFileAccess(t, fileId, storageId, "key");
+    await insertDownloadGrant(t, {
+      storageId,
+      maxUses: null,
+      useCount: 0,
+    });
+
+    const r2Spy = vi.spyOn(r2, "deleteR2Object").mockResolvedValue(undefined);
+    r2Spy.mockClear();
+
+    expect(
+      await t.mutation(api.cleanUp.deleteFile, {
+        storageId,
+        deleteStorage: false,
+      }),
+    ).toEqual({ deleted: true });
+    expect(r2Spy).not.toHaveBeenCalled();
+
+    const remaining = await t.run(async (ctx) => ({
+      file: await ctx.db
+        .query("files")
+        .withIndex("by_storageId", (q) => q.eq("storageId", storageId))
+        .unique(),
+      accessRows: await ctx.db
+        .query("fileAccess")
+        .withIndex("by_storageId", (q) => q.eq("storageId", storageId))
+        .collect(),
+      grants: await ctx.db
+        .query("downloadGrants")
+        .withIndex("by_storageId", (q) => q.eq("storageId", storageId))
+        .collect(),
+    }));
+
+    expect(remaining).toEqual({ file: null, accessRows: [], grants: [] });
+  });
+
   test("cleanupExpired deletes expired records", async () => {
     const t = initConvexTest();
     vi.useFakeTimers();
