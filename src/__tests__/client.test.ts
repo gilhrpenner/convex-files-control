@@ -132,6 +132,72 @@ describe("registerRoutes", () => {
     expect(downloadResponse.status).toBe(204);
   });
 
+  test("applies an exact CORS policy to preflight and normal requests", async () => {
+    const router = createRouter();
+    registerRoutes(router, component, {
+      cors: {
+        allowedHeaders: ["Authorization", "Content-Type"],
+        allowedOrigins: ["https://app.example.com"],
+        allowCredentials: false,
+      },
+      enableUploadRoute: true,
+      checkUploadRequest: mockCheckUploadRequest(),
+    });
+
+    const uploadOptions = getRoute(router, "/files/upload", "OPTIONS");
+    const uploadPost = getRoute(router, "/files/upload", "POST");
+    const optionsHandler = getHandler(uploadOptions.handler);
+    const postHandler = getHandler(uploadPost.handler);
+    const allowedRequest = new Request("https://api.example.com/files/upload", {
+      headers: {
+        "Access-Control-Request-Headers": "Authorization,X-Injected-Header",
+        Origin: "https://app.example.com",
+      },
+      method: "OPTIONS",
+    });
+    const blockedRequest = new Request("https://api.example.com/files/upload", {
+      headers: { Origin: "https://preview.example.com" },
+      method: "OPTIONS",
+    });
+    const blockedPostRequest = new Request(
+      "https://api.example.com/files/upload",
+      {
+        body: "{}",
+        headers: {
+          "Content-Type": "application/json",
+          Origin: "https://preview.example.com",
+        },
+        method: "POST",
+      },
+    );
+
+    const allowedResponse = await optionsHandler({}, allowedRequest);
+    const blockedResponse = await optionsHandler({}, blockedRequest);
+    const blockedPostResponse = await postHandler(
+      makeCtx(),
+      blockedPostRequest,
+    );
+
+    expect(allowedResponse.status).toBe(204);
+    expect(allowedResponse.headers.get("Access-Control-Allow-Origin")).toBe(
+      "https://app.example.com",
+    );
+    expect(allowedResponse.headers.get("Access-Control-Allow-Headers")).toBe(
+      "Content-Type, Authorization",
+    );
+    expect(
+      allowedResponse.headers.get("Access-Control-Allow-Credentials"),
+    ).toBeNull();
+    expect(blockedResponse.status).toBe(403);
+    expect(
+      blockedResponse.headers.get("Access-Control-Allow-Origin"),
+    ).toBeNull();
+    expect(blockedPostResponse.status).toBe(403);
+    expect(
+      blockedPostResponse.headers.get("Access-Control-Allow-Origin"),
+    ).toBeNull();
+  });
+
   test("download route handles without accessKeyQueryParam", async () => {
     const router = createRouter();
     registerRoutes(router, component);
