@@ -1,6 +1,12 @@
 const DEFAULT_ALLOW_HEADERS = ["Content-Type", "Authorization"];
 
-function buildAllowHeaders(extra?: string[]): string {
+export interface CorsPolicy {
+  allowedHeaders: string[];
+  allowedOrigins: string[];
+  allowCredentials?: boolean;
+}
+
+function buildAllowHeaders(extra?: string[], includeDefaults = true): string {
   const headers: string[] = [];
   const seen = new Set<string>();
 
@@ -13,8 +19,10 @@ function buildAllowHeaders(extra?: string[]): string {
     headers.push(trimmed);
   };
 
-  for (const header of DEFAULT_ALLOW_HEADERS) {
-    addHeader(header);
+  if (includeDefaults) {
+    for (const header of DEFAULT_ALLOW_HEADERS) {
+      addHeader(header);
+    }
   }
   for (const header of extra ?? []) {
     addHeader(header);
@@ -23,22 +31,38 @@ function buildAllowHeaders(extra?: string[]): string {
   return headers.join(", ");
 }
 
-export function corsHeaders(origin?: string, allowHeaders?: string[]): Headers {
+export function corsHeaders(
+  origin?: string,
+  allowHeaders?: string[],
+  policy?: CorsPolicy,
+): Headers {
   const headers = new Headers({
-    "Access-Control-Allow-Origin": origin || "*",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": buildAllowHeaders(allowHeaders),
+    "Access-Control-Allow-Headers": policy
+      ? buildAllowHeaders(policy.allowedHeaders, false)
+      : buildAllowHeaders(allowHeaders),
   });
+
   if (origin) {
+    headers.set("Access-Control-Allow-Origin", origin);
+  } else if (!policy) {
+    headers.set("Access-Control-Allow-Origin", "*");
+  }
+
+  if (origin && (policy?.allowCredentials ?? !policy)) {
     headers.set("Access-Control-Allow-Credentials", "true");
   }
   return headers;
 }
 
-export function corsResponse(origin?: string, allowHeaders?: string[]): Response {
+export function corsResponse(
+  origin?: string,
+  allowHeaders?: string[],
+  policy?: CorsPolicy,
+): Response {
   return new Response(null, {
     status: 204,
-    headers: corsHeaders(origin, allowHeaders),
+    headers: corsHeaders(origin, allowHeaders, policy),
   });
 }
 
@@ -46,8 +70,9 @@ export function jsonSuccess(
   data: unknown,
   origin?: string,
   allowHeaders?: string[],
+  policy?: CorsPolicy,
 ): Response {
-  const headers = corsHeaders(origin, allowHeaders);
+  const headers = corsHeaders(origin, allowHeaders, policy);
   headers.set("Content-Type", "application/json");
 
   return new Response(JSON.stringify(data), { status: 200, headers });
@@ -58,8 +83,9 @@ export function jsonError(
   status: number,
   origin?: string,
   allowHeaders?: string[],
+  policy?: CorsPolicy,
 ): Response {
-  const headers = corsHeaders(origin, allowHeaders);
+  const headers = corsHeaders(origin, allowHeaders, policy);
   headers.set("Content-Type", "application/json");
 
   return new Response(JSON.stringify({ error: message }), { status, headers });

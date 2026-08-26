@@ -139,7 +139,7 @@ registerRoutes(http, components.convexFilesControl, {
     const fileName =
       typeof fileNameFromForm === "string"
         ? fileNameFromForm
-        : (file as File).name ?? "untitled";
+        : ((file as File).name ?? "untitled");
     // await ctx.runMutation(api.files.recordUpload, { ...result, fileName });
   },
 
@@ -160,8 +160,8 @@ HTTP upload requires `multipart/form-data` with fields:
 - `expiresAt` (optional, timestamp or `null`)
 
 Access keys are not accepted via the form; they must come from
-`checkUploadRequest`. Additional form fields are available on
-`onUploadComplete` via `formData`.
+`checkUploadRequest`. Additional form fields are available on `onUploadComplete`
+via `formData`.
 
 Useful route options:
 
@@ -170,6 +170,21 @@ Useful route options:
 - `enableDownloadRoute` (default: `true`)
 - `requireAccessKey` (force `checkDownloadRequest` to return an access key)
 - `passwordHeader` / `passwordQueryParam` (override or disable password inputs)
+- `cors` (exact browser origins and allowed headers; other browser origins
+  receive `403`)
+
+```ts
+registerRoutes(http, components.convexFilesControl, {
+  cors: {
+    allowedOrigins: ["https://app.example.com"],
+    allowedHeaders: ["Authorization", "Content-Type"],
+    allowCredentials: false,
+  },
+});
+```
+
+Requests without an `Origin` header continue to work. If `cors` is omitted, the
+existing permissive CORS behavior remains unchanged.
 
 ## Uploading files
 

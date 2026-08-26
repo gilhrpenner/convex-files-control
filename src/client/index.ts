@@ -38,17 +38,19 @@ import type {
   UploadResult,
 } from "../shared/types.js";
 import {
+  type CorsPolicy,
+  corsHeaders,
   corsResponse,
   jsonError,
   jsonSuccess,
   parseOptionalTimestamp,
   sanitizeFilename,
   statusCodeForDownloadError,
-  corsHeaders,
 } from "./http.js";
 
 export { uploadFormFields };
 export type { StorageProvider, R2Config } from "../shared/types.js";
+export type { CorsPolicy } from "./http.js";
 
 export type R2ConfigInput = {
   accountId?: string;
@@ -78,8 +80,7 @@ const resolveR2Config = (input?: R2ConfigInput): R2Config | null => {
     accessKeyId:
       input?.accessKeyId ?? readEnv(REQUIRED_R2_ENV_VARS.accessKeyId),
     secretAccessKey:
-      input?.secretAccessKey ??
-      readEnv(REQUIRED_R2_ENV_VARS.secretAccessKey),
+      input?.secretAccessKey ?? readEnv(REQUIRED_R2_ENV_VARS.secretAccessKey),
     bucketName: input?.bucketName ?? readEnv(REQUIRED_R2_ENV_VARS.bucketName),
     jurisdiction:
       input?.jurisdiction ?? readEnv(OPTIONAL_R2_ENV_VARS.jurisdiction),
@@ -126,13 +127,22 @@ const normalizeOptionalHeaderName = (value?: string) => {
 const getOrigin = (request: Request) =>
   request.headers.get("Origin") ?? undefined;
 
+const isCorsOriginAllowed = (
+  origin: string | undefined,
+  policy: CorsPolicy | undefined,
+) =>
+  origin === undefined ||
+  policy === undefined ||
+  policy.allowedOrigins.includes(origin);
+
 const withCors = (
   response: Response,
   origin?: string,
   allowHeaders?: string[],
+  policy?: CorsPolicy,
 ) => {
   const headers = new Headers(response.headers);
-  const cors = corsHeaders(origin, allowHeaders);
+  const cors = corsHeaders(origin, allowHeaders, policy);
   for (const [key, value] of cors.entries()) {
     headers.set(key, value);
   }
@@ -154,6 +164,8 @@ const resolveUploadProvider = (
 export interface RegisterRoutesOptions {
   /** Prefix for HTTP routes, defaults to "/files". */
   pathPrefix?: string;
+  /** Optional exact CORS policy. Requests from other browser origins receive 403. */
+  cors?: CorsPolicy;
   /** Require accessKey for downloads (via checkDownloadRequest hook). */
   requireAccessKey?: boolean;
   /**
@@ -248,6 +260,7 @@ export function registerRoutes(
 ) {
   const {
     pathPrefix = DEFAULT_PATH_PREFIX,
+    cors,
     requireAccessKey = false,
     passwordQueryParam = "password",
     passwordHeader = "x-download-password",
@@ -282,7 +295,9 @@ export function registerRoutes(
       method: "OPTIONS",
       handler: httpActionGeneric(async (_ctx, request) => {
         const origin = getOrigin(request);
-        return corsResponse(origin);
+        if (!isCorsOriginAllowed(origin, cors))
+          return new Response(null, { status: 403 });
+        return corsResponse(origin, undefined, cors);
       }),
     });
 
@@ -291,26 +306,42 @@ export function registerRoutes(
       method: "POST",
       handler: httpActionGeneric(async (ctx, request) => {
         const origin = getOrigin(request);
+        if (!isCorsOriginAllowed(origin, cors))
+          return new Response(null, { status: 403 });
         const contentType = request.headers.get("Content-Type") ?? "";
         if (!contentType.includes("multipart/form-data")) {
           return jsonError(
             "Content-Type must be multipart/form-data",
             415,
             origin,
+            undefined,
+            cors,
           );
         }
 
         const formData = await request.formData();
         const file = formData.get(uploadFormFields.file);
         if (!(file instanceof Blob)) {
-          return jsonError("Missing or invalid 'file' field", 400, origin);
+          return jsonError(
+            "Missing or invalid 'file' field",
+            400,
+            origin,
+            undefined,
+            cors,
+          );
         }
 
         const expiresAt = parseOptionalTimestamp(
           formData.get(uploadFormFields.expiresAt),
         );
         if (expiresAt === "invalid") {
-          return jsonError("'expiresAt' must be a number or null", 400, origin);
+          return jsonError(
+            "'expiresAt' must be a number or null",
+            400,
+            origin,
+            undefined,
+            cors,
+          );
         }
 
         const provider = resolveUploadProvider(
@@ -328,7 +359,7 @@ export function registerRoutes(
 
         // If hook returns a Response, wrap it with CORS headers
         if (hookResult instanceof Response) {
-          return withCors(hookResult, origin);
+          return withCors(hookResult, origin, undefined, cors);
         }
 
         if (!hookResult || typeof hookResult !== "object") {
@@ -336,6 +367,8 @@ export function registerRoutes(
             "checkUploadRequest must return accessKeys",
             500,
             origin,
+            undefined,
+            cors,
           );
         }
 
@@ -345,6 +378,8 @@ export function registerRoutes(
             "checkUploadRequest must return accessKeys",
             500,
             origin,
+            undefined,
+            cors,
           );
         }
 
@@ -359,6 +394,8 @@ export function registerRoutes(
                 : "R2 configuration missing.",
               500,
               origin,
+              undefined,
+              cors,
             );
           }
         }
@@ -380,7 +417,7 @@ export function registerRoutes(
         });
 
         if (!uploadResponse.ok) {
-          return jsonError("File upload failed", 502, origin);
+          return jsonError("File upload failed", 502, origin, undefined, cors);
         }
 
         let storageId = presetStorageId ?? null;
@@ -392,7 +429,13 @@ export function registerRoutes(
         }
 
         if (!storageId) {
-          return jsonError("Upload did not return storageId", 502, origin);
+          return jsonError(
+            "Upload did not return storageId",
+            502,
+            origin,
+            undefined,
+            cors,
+          );
         }
 
         const metadata = {
@@ -422,11 +465,11 @@ export function registerRoutes(
           });
 
           if (hookResult instanceof Response) {
-            return withCors(hookResult, origin);
+            return withCors(hookResult, origin, undefined, cors);
           }
         }
 
-        return jsonSuccess(result, origin);
+        return jsonSuccess(result, origin, undefined, cors);
       }),
     });
   }
@@ -437,7 +480,9 @@ export function registerRoutes(
       method: "OPTIONS",
       handler: httpActionGeneric(async (_ctx, request) => {
         const origin = getOrigin(request);
-        return corsResponse(origin, downloadCorsAllowHeaders);
+        if (!isCorsOriginAllowed(origin, cors))
+          return new Response(null, { status: 403 });
+        return corsResponse(origin, downloadCorsAllowHeaders, cors);
       }),
     });
 
@@ -446,6 +491,8 @@ export function registerRoutes(
       method: "GET",
       handler: httpActionGeneric(async (ctx, request) => {
         const origin = getOrigin(request);
+        if (!isCorsOriginAllowed(origin, cors))
+          return new Response(null, { status: 403 });
         const url = new URL(request.url);
         const downloadToken = url.searchParams.get("token");
         if (!downloadToken) {
@@ -454,6 +501,7 @@ export function registerRoutes(
             400,
             origin,
             downloadCorsAllowHeaders,
+            cors,
           );
         }
 
@@ -476,7 +524,7 @@ export function registerRoutes(
             request,
           });
           if (result instanceof Response) {
-            return withCors(result, origin, downloadCorsAllowHeaders);
+            return withCors(result, origin, downloadCorsAllowHeaders, cors);
           }
           // If hook returns { accessKey }, use it
           if (result && typeof result === "object" && "accessKey" in result) {
@@ -490,6 +538,7 @@ export function registerRoutes(
             401,
             origin,
             downloadCorsAllowHeaders,
+            cors,
           );
         }
 
@@ -509,6 +558,7 @@ export function registerRoutes(
             statusCodeForDownloadError(result.status),
             origin,
             downloadCorsAllowHeaders,
+            cors,
           );
         }
 
@@ -519,11 +569,12 @@ export function registerRoutes(
             404,
             origin,
             downloadCorsAllowHeaders,
+            cors,
           );
         }
 
         const filename = sanitizeFilename(url.searchParams.get("filename"));
-        const headers = corsHeaders(origin, downloadCorsAllowHeaders);
+        const headers = corsHeaders(origin, downloadCorsAllowHeaders, cors);
         headers.set("Cache-Control", "no-store");
         headers.set(
           "Content-Disposition",
