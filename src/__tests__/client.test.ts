@@ -136,7 +136,7 @@ describe("registerRoutes", () => {
     const router = createRouter();
     registerRoutes(router, component, {
       cors: {
-        allowedHeaders: ["Authorization", "Content-Type"],
+        allowedHeaders: ["X-Trace"],
         allowedOrigins: ["https://app.example.com"],
         allowCredentials: false,
       },
@@ -150,7 +150,7 @@ describe("registerRoutes", () => {
     const postHandler = getHandler(uploadPost.handler);
     const allowedRequest = new Request("https://api.example.com/files/upload", {
       headers: {
-        "Access-Control-Request-Headers": "Authorization,X-Injected-Header",
+        "Access-Control-Request-Headers": "X-Trace,X-Injected-Header",
         Origin: "https://app.example.com",
       },
       method: "OPTIONS",
@@ -183,7 +183,7 @@ describe("registerRoutes", () => {
       "https://app.example.com",
     );
     expect(allowedResponse.headers.get("Access-Control-Allow-Headers")).toBe(
-      "Content-Type, Authorization",
+      "X-Trace",
     );
     expect(
       allowedResponse.headers.get("Access-Control-Allow-Credentials"),

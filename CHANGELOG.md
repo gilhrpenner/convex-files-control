@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.5.8 (2026-08-25)
+
+### Features
+
+- **http**: Add an optional exact CORS policy for HTTP upload and download
+  routes. Applications can allow specific browser origins and request headers,
+  control credential support, and reject other browser origins with `403`.
+  Routes keep the existing permissive behavior when the policy is omitted.
+
+### Tests
+
+- **http**: Cover allowed and rejected origins, exact allowed-header lists, and
+  credential response headers.
+
+---
+
 ## 0.5.7 (2026-08-02)
 
 ### Features

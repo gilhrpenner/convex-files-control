@@ -9,7 +9,7 @@
   "bugs": {
     "url": "https://github.com/gilhrpenner/convex-files-control/issues"
   },
-  "version": "0.5.7",
+  "version": "0.5.8",
   "publishConfig": {
     "access": "public"
   },

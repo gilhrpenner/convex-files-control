@@ -6,7 +6,7 @@ export interface CorsPolicy {
   allowCredentials?: boolean;
 }
 
-function buildAllowHeaders(extra?: string[]): string {
+function buildAllowHeaders(extra?: string[], includeDefaults = true): string {
   const headers: string[] = [];
   const seen = new Set<string>();
 
@@ -19,8 +19,10 @@ function buildAllowHeaders(extra?: string[]): string {
     headers.push(trimmed);
   };
 
-  for (const header of DEFAULT_ALLOW_HEADERS) {
-    addHeader(header);
+  if (includeDefaults) {
+    for (const header of DEFAULT_ALLOW_HEADERS) {
+      addHeader(header);
+    }
   }
   for (const header of extra ?? []) {
     addHeader(header);
@@ -37,7 +39,7 @@ export function corsHeaders(
   const headers = new Headers({
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": policy
-      ? buildAllowHeaders(policy.allowedHeaders)
+      ? buildAllowHeaders(policy.allowedHeaders, false)
       : buildAllowHeaders(allowHeaders),
   });
 
