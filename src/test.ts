@@ -4,7 +4,15 @@ import type { GenericSchema, SchemaDefinition } from "convex/server";
 import schema from "./component/schema.js";
 import actionRetrier from "@convex-dev/action-retrier/test";
 
-const modules = import.meta.glob("./component/**/*.ts");
+const modules = import.meta.glob([
+  "./component/**/*.ts",
+  "!./component/**/*.test.ts",
+  "!./component/convex.config.ts",
+]);
+
+// Load dependencies before nested queries and mutations restrict global timers.
+await Promise.all(Object.values(modules).map((load) => load()));
+await Promise.all(Object.values(actionRetrier.modules).map((load) => load()));
 
 /**
  * Register this component in a Convex test instance.
@@ -26,7 +34,7 @@ export function register(
   name: string = "convexFilesControl",
 ) {
   t.registerComponent(name, schema, modules);
-  actionRetrier.register(t);
+  actionRetrier.register(t, `${name}/actionRetrier`);
 }
 
 export default { register, schema, modules };

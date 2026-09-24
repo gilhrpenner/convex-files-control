@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.5.9 (2026-09-23)
+
+### Fixes
+
+- Use the cleanup action retrier in tests and production. Storage failures retry
+  after file registration deletion commits.
+- Preload component test modules before Convex queries and mutations restrict
+  global timers.
+
+### Tests
+
+- Verify cleanup scheduling and retry behavior with Convex Test 0.0.59.
+
 ## 0.5.8 (2026-08-25)
 
 ### Features

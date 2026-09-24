@@ -15,10 +15,6 @@ import { deleteR2Object, r2ConfigValidator, requireR2Config } from "./r2.js";
 
 const retrier = new ActionRetrier(components.actionRetrier);
 
-const useActionRetrier =
-  typeof process === "undefined" ||
-  (!process.env.VITEST && process.env.NODE_ENV !== "test");
-
 /**
  * Delete a storage object by ID.
  *
@@ -53,32 +49,6 @@ export const deleteStorageFile = action({
   },
 });
 
-async function deleteStorageFileWithRetry(
-  ctx: MutationCtx,
-  args: {
-    storageId: string;
-    storageProvider: "convex" | "r2";
-    r2Config?: {
-      accountId: string;
-      accessKeyId: string;
-      secretAccessKey: string;
-      bucketName: string;
-    };
-  },
-) {
-  if (!useActionRetrier) {
-    if (args.storageProvider === "convex") {
-      await ctx.storage.delete(toStorageId(args.storageId));
-      return;
-    }
-    const r2Config = requireR2Config(args.r2Config, "R2 deletes");
-    await deleteR2Object(r2Config, args.storageId);
-    return;
-  }
-
-  await retrier.run(ctx, api.cleanUp.deleteStorageFile, args);
-}
-
 async function deleteFileCascadeCore(
   ctx: MutationCtx,
   file: Doc<"files">,
@@ -105,7 +75,7 @@ async function deleteFileCascadeCore(
   await Promise.all([
     ctx.db.delete(file._id),
     deleteStorage &&
-      deleteStorageFileWithRetry(ctx, {
+      retrier.run(ctx, api.cleanUp.deleteStorageFile, {
         storageId,
         storageProvider: file.storageProvider,
         r2Config,

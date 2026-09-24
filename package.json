@@ -9,7 +9,7 @@
   "bugs": {
     "url": "https://github.com/gilhrpenner/convex-files-control/issues"
   },
-  "version": "0.5.8",
+  "version": "0.5.9",
   "publishConfig": {
     "access": "public"
   },
@@ -104,8 +104,8 @@
     "@vitejs/plugin-react": "^5.2.0",
     "@vitest/coverage-v8": "^4.1.7",
     "chokidar-cli": "3.0.0",
-    "convex": "1.41.0",
-    "convex-test": "0.0.53",
+    "convex": "1.45.0",
+    "convex-test": "0.0.59",
     "cpy-cli": "^6.0.0",
     "eslint": "9.39.2",
     "eslint-plugin-react": "^7.37.5",
