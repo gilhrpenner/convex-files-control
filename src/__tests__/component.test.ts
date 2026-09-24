@@ -1015,6 +1015,7 @@ describe("cleanUp", () => {
   });
 
   test("deleteFile uses r2 deletion path", async () => {
+    vi.useFakeTimers();
     const t = initConvexTest();
     const r2Config = {
       accountId: "acct",
@@ -1034,12 +1035,16 @@ describe("cleanUp", () => {
 
     const r2Spy = vi.spyOn(r2, "deleteR2Object").mockResolvedValue(undefined);
 
+    r2Spy.mockClear();
     const deleted = await t.mutation(api.cleanUp.deleteFile, {
       storageId,
       r2Config,
     });
 
     expect(deleted).toEqual({ deleted: true });
+    expect(r2Spy).not.toHaveBeenCalled();
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    vi.useRealTimers();
     expect(r2Spy).toHaveBeenCalledWith(r2Config, storageId);
   });
 

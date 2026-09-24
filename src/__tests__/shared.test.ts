@@ -110,8 +110,8 @@ describe("test helpers", () => {
     expect(registerComponent).toHaveBeenCalledTimes(2);
     expect(registerComponent.mock.calls[0]?.[0]).toBe("customComponent");
     expect(registerComponent.mock.calls[0]?.[1]).toBe(schema);
-    expect(registerComponent.mock.calls[1]?.[0]).toBe("actionRetrier");
-    expect(retrierSpy).toHaveBeenCalledWith(t);
+    expect(registerComponent.mock.calls[1]?.[0]).toBe("customComponent/actionRetrier");
+    expect(retrierSpy).toHaveBeenCalledWith(t, "customComponent/actionRetrier");
   });
 
   test("default export exposes helpers", () => {
