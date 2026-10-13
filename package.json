@@ -120,8 +120,8 @@
     "react-dom": "^19.2.6",
     "typescript": "5.9.3",
     "typescript-eslint": "8.57.1",
-    "vite": "8.2.2",
-    "vitest": "4.1.7"
+    "vite": "8.3.4",
+    "vitest": "5.0.4"
   },
   "types": "./dist/client/index.d.ts",
   "module": "./dist/client/index.js"
