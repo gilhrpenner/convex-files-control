@@ -160,7 +160,7 @@ jobs:
   github-release:
     needs: [validate, publish]
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:
