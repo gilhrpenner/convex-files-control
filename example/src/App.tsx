@@ -1,3 +1,5 @@
+import { useNow } from "@/hooks/use-now";
+import { convexSiteUrl } from "@/lib/convex";
 import * as React from "react";
 import { StickyHeader } from "@/components/StickyHeader";
 import { TransferSection } from "@/components/TransferSection";
@@ -30,9 +32,18 @@ import {
   EmptyTitle,
   EmptyDescription,
 } from "@/components/ui/empty";
-import { Upload, Loader2, FileIcon, Cloud, HardDrive, Trash, Download } from "lucide-react";
+import {
+  Upload,
+  Loader2,
+  FileIcon,
+  Cloud,
+  HardDrive,
+  Trash,
+  Download,
+} from "lucide-react";
 import { useUploadFile } from "@gilhrpenner/convex-files-control/react";
 import type { StorageProvider } from "@gilhrpenner/convex-files-control";
+import type { Id } from "../convex/_generated/dataModel";
 import { api } from "../convex/_generated/api";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
@@ -44,6 +55,7 @@ import { toast } from "sonner";
 const DEMO_MAX_FILE_SIZE_MB = 5;
 
 function App() {
+  const now = useNow();
   const [files, setFiles] = React.useState<FileItem[]>([]);
   const [provider, setProvider] = React.useState<StorageProvider>("convex");
   const [method, setMethod] = React.useState<"presigned" | "http">("presigned");
@@ -58,11 +70,6 @@ function App() {
   );
   const deleteFile = useMutation(api.files.deleteFile);
   const getFileDownloadUrl = useMutation(api.files.getFileDownloadUrl);
-
-  const convexSiteUrl = React.useMemo(
-    () => (import.meta.env.VITE_CONVEX_URL || "https://intent-tiger-143.convex.cloud").replace(".cloud", ".site"),
-    [],
-  );
 
   const { uploadFile } = useUploadFile(api.files, {
     http: {
@@ -95,11 +102,11 @@ function App() {
 
     // Demo limit: Check file sizes before upload
     const oversizedFiles = files.filter(
-      (f) => f.file.size > DEMO_MAX_FILE_SIZE_MB * 1024 * 1024
+      (f) => f.file.size > DEMO_MAX_FILE_SIZE_MB * 1024 * 1024,
     );
     if (oversizedFiles.length > 0) {
       toast.error(
-        `File size exceeds ${DEMO_MAX_FILE_SIZE_MB}MB limit: ${oversizedFiles.map((f) => f.file.name).join(", ")}`
+        `File size exceeds ${DEMO_MAX_FILE_SIZE_MB}MB limit: ${oversizedFiles.map((f) => f.file.name).join(", ")}`,
       );
       return;
     }
@@ -109,13 +116,11 @@ function App() {
     try {
       for (const fileItem of files) {
         // Create a new File object with the user's custom name
-        const fileWithCustomName = new File(
-          [fileItem.file],
-          fileItem.name,
-          { type: fileItem.file.type }
-        );
+        const fileWithCustomName = new File([fileItem.file], fileItem.name, {
+          type: fileItem.file.type,
+        });
         const resolvedVirtualPath = resolveVirtualPath(fileWithCustomName.name);
-        
+
         await uploadFile({
           file: fileWithCustomName,
           expiresAt: expiresAt?.getTime() ?? null,
@@ -125,7 +130,7 @@ function App() {
         });
       }
       setFiles([]);
-      
+
       // Demo info toast
       toast.success("Upload successful!", {
         description:
@@ -142,27 +147,25 @@ function App() {
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (id: Id<"filesUploads">) => {
     try {
-      // @ts-expect-error - we know the id is correct string
       await deleteFile({ _id: id });
     } catch (error) {
       console.error("Delete failed:", error);
     }
   };
 
-  const handleDownload = async (id: string) => {
+  const handleDownload = async (id: Id<"filesUploads">) => {
     try {
-      // @ts-expect-error - we know the id is correct string
       const { downloadUrl, fileName } = await getFileDownloadUrl({ _id: id });
-      
+
       // Fetch the file in the background
       const response = await fetch(downloadUrl);
       if (!response.ok) {
         throw new Error("Failed to fetch file");
       }
       const blob = await response.blob();
-      
+
       // Create blob URL and trigger download
       const blobUrl = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -240,7 +243,8 @@ function App() {
                   className="bg-white/5 border-white/10"
                 />
                 <p className="text-xs text-muted-foreground">
-                  If you upload multiple files, this is treated as a folder and the file name is appended.
+                  If you upload multiple files, this is treated as a folder and
+                  the file name is appended.
                 </p>
               </div>
 
@@ -296,98 +300,125 @@ function App() {
                 </Empty>
               ) : (
                 <>
-                  {userUploads.some((u) => u.expiresAt != null && u.expiresAt < Date.now()) && (
+                  {userUploads.some(
+                    (u) => u.expiresAt != null && u.expiresAt < now,
+                  ) && (
                     <div className="mb-4 rounded-md bg-yellow-500/10 border border-yellow-500/30 px-4 py-3 text-sm text-yellow-200">
-                      <strong>Note:</strong> Expired files are automatically cleaned up by a scheduled cron job.
-                      See the <a href="https://github.com/gilhrpenner/convex-files-control#cleanup" target="_blank" rel="noopener noreferrer" className="underline hover:text-yellow-100">documentation</a> for details on configuring cleanup intervals.
+                      <strong>Note:</strong> Expired files are automatically
+                      cleaned up by a scheduled cron job. See the{" "}
+                      <a
+                        href="https://github.com/gilhrpenner/convex-files-control#cleanup"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline hover:text-yellow-100"
+                      >
+                        documentation
+                      </a>{" "}
+                      for details on configuring cleanup intervals.
                     </div>
                   )}
                   <Table>
                     <TableHeader>
-                    <TableRow>
-                      <TableHead>File name</TableHead>
-                      <TableHead>Virtual path</TableHead>
-                      <TableHead>Provider</TableHead>
-                      <TableHead>Size</TableHead>
-                      <TableHead>Expires</TableHead>
-                      <TableHead className="w-[100px]"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {userUploads.map((upload) => (
-                      <TableRow key={upload._id}>
-                        <TableCell className="font-medium">
-                          {upload.fileName}
-                        </TableCell>
-                        <TableCell className="text-xs text-muted-foreground max-w-[220px] truncate">
-                          {upload.virtualPath ?? "-"}
-                        </TableCell>
-                        <TableCell>
-                          <span className="inline-flex items-center gap-1.5">
-                            {upload.storageProvider === "convex" ? (
-                              <HardDrive className="h-4 w-4" />
-                            ) : (
-                              <Cloud className="h-4 w-4" />
-                            )}
-                            {upload.storageProvider === "convex"
-                              ? "Convex"
-                              : "R2"}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          {upload.metadata?.size
-                            ? `${(upload.metadata.size / 1024).toFixed(1)} KB`
-                            : "-"}
-                        </TableCell>
-                        <TableCell>
-                          {upload.expiresAt
-                            ? upload.expiresAt < Date.now()
-                              ? <span className="text-destructive font-medium">Expired</span>
-                              : new Date(upload.expiresAt).toLocaleString()
-                            : "Never"}
-                        </TableCell>
-                        <TableCell>
-                          {(() => {
-                            const isExpired = upload.expiresAt != null && upload.expiresAt < Date.now();
-                            return (
-                              <div className="flex items-center gap-1">
-                                <ShareDialog
-                                  fileId={upload._id}
-                                  fileName={upload.fileName}
-                                  disabled={isExpired}
-                                />
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 text-muted-foreground hover:text-primary"
-                                  onClick={() => void handleDownload(upload._id)}
-                                  disabled={isExpired}
-                                  title={isExpired ? "File has expired" : "Download"}
-                                >
-                                  <Download className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                                  onClick={() => void handleDelete(upload._id)}
-                                >
-                                  <Trash className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            );
-                          })()}
-                        </TableCell>
+                      <TableRow>
+                        <TableHead>File name</TableHead>
+                        <TableHead>Virtual path</TableHead>
+                        <TableHead>Provider</TableHead>
+                        <TableHead>Size</TableHead>
+                        <TableHead>Expires</TableHead>
+                        <TableHead className="w-[100px]"></TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {userUploads.map((upload) => (
+                        <TableRow key={upload._id}>
+                          <TableCell className="font-medium">
+                            {upload.fileName}
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground max-w-[220px] truncate">
+                            {upload.virtualPath ?? "-"}
+                          </TableCell>
+                          <TableCell>
+                            <span className="inline-flex items-center gap-1.5">
+                              {upload.storageProvider === "convex" ? (
+                                <HardDrive className="h-4 w-4" />
+                              ) : (
+                                <Cloud className="h-4 w-4" />
+                              )}
+                              {upload.storageProvider === "convex"
+                                ? "Convex"
+                                : "R2"}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            {upload.metadata?.size
+                              ? `${(upload.metadata.size / 1024).toFixed(1)} KB`
+                              : "-"}
+                          </TableCell>
+                          <TableCell>
+                            {upload.expiresAt ? (
+                              upload.expiresAt < now ? (
+                                <span className="text-destructive font-medium">
+                                  Expired
+                                </span>
+                              ) : (
+                                new Date(upload.expiresAt).toLocaleString()
+                              )
+                            ) : (
+                              "Never"
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {(() => {
+                              const isExpired =
+                                upload.expiresAt != null &&
+                                upload.expiresAt < now;
+                              return (
+                                <div className="flex items-center gap-1">
+                                  <ShareDialog
+                                    fileId={upload._id}
+                                    fileName={upload.fileName}
+                                    disabled={isExpired}
+                                  />
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 text-muted-foreground hover:text-primary"
+                                    onClick={() =>
+                                      void handleDownload(upload._id)
+                                    }
+                                    disabled={isExpired}
+                                    title={
+                                      isExpired
+                                        ? "File has expired"
+                                        : "Download"
+                                    }
+                                  >
+                                    <Download className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                    aria-label={`Delete ${upload.fileName}`}
+                                    onClick={() =>
+                                      void handleDelete(upload._id)
+                                    }
+                                  >
+                                    <Trash className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              );
+                            })()}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
                 </>
               )}
             </div>
           </div>
         </div>
-
 
         <TransferSection />
         <AccessControlSection />

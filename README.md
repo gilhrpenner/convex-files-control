@@ -17,7 +17,17 @@ an optional HTTP upload/download router plus a React upload hook.
 - Transfer files between Convex and R2.
 - React hook for presigned or HTTP uploads.
 
+## Development and demo
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for reproducible checks,
+[example/README.md](example/README.md) for local setup, and
+[example/DEPLOY.md](example/DEPLOY.md) for deployment. The live demo is a shared
+sandbox with demo-user impersonation; upload disposable test data only.
+
 ## Install
+
+Requires Convex 1.46+ and Node 22.12+ (Node 24 recommended). React 18 and 19
+remain supported.
 
 ```bash
 npm install @gilhrpenner/convex-files-control

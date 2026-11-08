@@ -1,0 +1,34 @@
+
+> @gilhrpenner/convex-files-control@0.5.9 test:coverage
+> vitest run --coverage --coverage.reporter=text
+
+
+ RUN  v4.1.12 <repository>
+      Coverage enabled with v8
+
+
+ Test Files  21 passed (21)
+      Tests  161 passed (161)
+   Start at  11:00:34
+   Duration  595ms (transform 2.18s, setup 0ms, import 3.10s, tests 652ms, environment 888ms)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   98.38 |    98.75 |     100 |   98.36 |
+ src/client        |    99.4 |     98.9 |     100 |   99.39 |
+  http.ts          |     100 |    97.77 |     100 |     100 | 48
+  index.ts         |   99.27 |    99.12 |     100 |   99.26 | 484,495
+ ...ent/_generated |       0 |      100 |     100 |       0 |
+  _ignore.ts       |       0 |      100 |     100 |       0 | 1
+ src/shared        |   78.94 |       75 |     100 |   78.57 |
+  hash.ts          |   72.09 |     62.5 |     100 |   71.42 | 35-47,74-76
+-------------------|---------|----------|---------|---------|-------------------
+
+=============================== Coverage summary ===============================
+Statements   : 98.38% ( 916/931 )
+Branches     : 98.75% ( 713/722 )
+Functions    : 100% ( 176/176 )
+Lines        : 98.36% ( 902/917 )
+================================================================================

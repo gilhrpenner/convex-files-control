@@ -1,7 +1,8 @@
+import type { Id } from "./_generated/dataModel";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { registerRoutes } from "@gilhrpenner/convex-files-control";
 import { httpRouter } from "convex/server";
-import { api, components } from "./_generated/api";
+import { internal, components } from "./_generated/api";
 import { auth } from "./auth";
 import { getR2ConfigFromEnv } from "./r2Config";
 
@@ -84,7 +85,7 @@ registerRoutes(http, components.convexFilesControl, {
 
   // Required hook for upload authentication
   // Called before every upload to authenticate and provide accessKeys
-  checkUploadRequest: async (ctx, _args) => {
+  checkUploadRequest: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -93,7 +94,35 @@ registerRoutes(http, components.convexFilesControl, {
       });
     }
 
-    return { accessKeys: [userId] };
+    if (args.file.size > 5 * 1024 * 1024) {
+      return new Response(
+        JSON.stringify({ error: "Demo limit: File size exceeds 5MB." }),
+        {
+          status: 413,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }
+    if (
+      args.expiresAt !== undefined &&
+      (!Number.isFinite(args.expiresAt) || args.expiresAt <= Date.now())
+    ) {
+      return new Response(
+        JSON.stringify({ error: "Expiration must be in the future." }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }
+    const virtualPath = args.formData.get("virtualPath");
+    return {
+      accessKeys: [userId],
+      virtualPath:
+        typeof virtualPath === "string"
+          ? virtualPath.trim() || undefined
+          : undefined,
+    };
   },
   onUploadComplete: async (ctx, args) => {
     // Prefer an explicit form field if the client supplied one
@@ -101,7 +130,7 @@ registerRoutes(http, components.convexFilesControl, {
     const fileName =
       typeof fileNameFromForm === "string"
         ? fileNameFromForm
-        : (args.file as File).name ?? "untitled";
+        : ((args.file as File).name ?? "untitled");
 
     // Demo limit: Enforce 24hr max expiration
     const now = Date.now();
@@ -115,9 +144,10 @@ registerRoutes(http, components.convexFilesControl, {
     const virtualPath =
       typeof virtualPathFromForm === "string" && virtualPathFromForm.trim()
         ? virtualPathFromForm.trim()
-        : args.result.virtualPath ?? undefined;
+        : (args.result.virtualPath ?? undefined);
 
-    await ctx.runMutation(api.files.recordUpload, {
+    await ctx.runMutation(internal.files.recordUpload, {
+      userId: args.accessKeys[0] as Id<"users">,
       storageId: args.result.storageId,
       storageProvider: args.result.storageProvider,
       fileName,

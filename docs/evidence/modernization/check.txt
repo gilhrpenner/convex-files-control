@@ -1,0 +1,72 @@
+
+> @gilhrpenner/convex-files-control@0.5.9 check
+> npm run build && npm run typecheck:all && npm run lint:all && npm test && npm run verify:dist-esm && npm --prefix example run build
+
+
+> @gilhrpenner/convex-files-control@0.5.9 build
+> tsc --project ./tsconfig.build.json
+
+
+> @gilhrpenner/convex-files-control@0.5.9 typecheck:all
+> npm run typecheck && npm --prefix example run typecheck
+
+
+> @gilhrpenner/convex-files-control@0.5.9 typecheck
+> tsc --noEmit
+
+
+> example@0.0.0 typecheck
+> tsc -b && tsc -p convex --noEmit
+
+
+> @gilhrpenner/convex-files-control@0.5.9 lint:all
+> npm run lint && npm --prefix example run lint
+
+
+> @gilhrpenner/convex-files-control@0.5.9 lint
+> eslint src/
+
+
+> example@0.0.0 lint
+> eslint src convex --max-warnings 0
+
+
+> @gilhrpenner/convex-files-control@0.5.9 test
+> vitest run --typecheck
+
+Testing types with tsc and vue-tsc is an experimental feature.
+Breaking changes might not follow SemVer, please pin Vitest's version when using it.
+
+ RUN  v4.1.12 <repository>
+
+
+ Test Files  21 passed (21)
+      Tests  161 passed (161)
+Type Errors  no errors
+   Start at  11:00:31
+   Duration  504ms (transform 2.61s, setup 0ms, import 3.21s, tests 569ms, environment 854ms)
+
+
+> @gilhrpenner/convex-files-control@0.5.9 verify:dist-esm
+> node ./scripts/check-dist-esm.mjs
+
+Verified dist ESM entrypoints.
+
+> example@0.0.0 build
+> tsc -b && vite build
+
+vite v8.3.6 building client environment for production...
+transforming...
+✓ 2849 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.46 kB │ gzip:   0.30 kB
+dist/assets/index-DHvLLH9N.css  114.64 kB │ gzip:  17.80 kB
+dist/assets/index-CJid8zN-.js   721.11 kB │ gzip: 218.18 kB
+
+[plugin builtin:vite-reporter]
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 217ms

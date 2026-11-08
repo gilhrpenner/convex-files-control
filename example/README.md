@@ -1,45 +1,55 @@
-# Welcome to your Convex + React (Vite) + Convex Auth app
+# Files Control demo
 
-This is a [Convex](https://convex.dev/) project created with [`npm create convex`](https://www.npmjs.com/package/create-convex).
+A React/Vite app using the local `file:..` library, Convex Auth, Convex storage,
+and optional Cloudflare R2. It demonstrates presigned and HTTP uploads, virtual
+paths, access keys, password-protected download grants, provider transfers, and
+scheduled expiration cleanup.
 
-After the initial setup (<2 minutes) you'll have a working full-stack app using:
+This is a **shared public sandbox**: the user switcher deliberately impersonates
+demo users and the administration view exposes their files. Use disposable test
+data only. Replace this authentication and enforce administrator roles before
+adapting it for a private app.
 
-- Convex as your backend (database, server logic)
-- [React](https://react.dev/) as your frontend (web page interactivity)
-- [Vite](https://vitest.dev/) for optimized web hosting
-- [Tailwind](https://tailwindcss.com/) for building great looking UI
-- [Convex Auth](https://labs.convex.dev/auth) for authentication
+## Run locally
 
-## Get started
+Run these commands from the **repository root**, with Node 24:
 
-If you just cloned this codebase and didn't use `npm create convex`, run:
-
-```
-npm install
+```sh
+npm ci
+npm --prefix example ci
+npm run build
+npx convex dev --once
+node example/node_modules/@convex-dev/auth/dist/bin.cjs --web-server-url http://localhost:5173
+npx convex dev --once --run seed:demoUsers
 npm run dev
 ```
 
-If you're reading this README on GitHub and want to use this template, run:
+The seed is internal and only adds Alice and Bob if the users table is empty.
+Select a demo user, upload a small test file, then try sharing, expiration, and
+deletion. Files are capped at 5MB by the UI and HTTP upload route; the example
+caps file expiration at 24 hours. Presigned uploads bypass the HTTP size check;
+production applications must validate actual stored object sizes server-side.
 
-```
-npm create convex@latest -- -t react-vite-convexauth
-```
+Vite reads **root `.env.local`**, written by the Convex CLI. It does not read an
+old `example/.env.local`. There is no fallback to the public demo backend.
+`VITE_CONVEX_URL` is required; hosted Convex HTTP URLs are derived from it. Local
+or custom deployments also need `VITE_CONVEX_SITE_URL` (see root `.env.example`).
+Restart Vite after changing environment files.
 
-For more information on how to configure Convex Auth, check out the [Convex Auth docs](https://labs.convex.dev/auth/).
+The auth setup configures `SITE_URL`, `JWT_PRIVATE_KEY`, and `JWKS` on the selected
+deployment. These values are separate for each dev/production deployment.
 
-For more examples of different Convex Auth flows, check out this [example repo](https://www.convex.dev/templates/convex-auth).
+## Optional R2
 
-## Learn more
+Set `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, and `R2_BUCKET_NAME`
+on the Convex deployment, optionally `R2_JURISDICTION`. Configure bucket CORS to
+allow your frontend origin, PUT/GET requests, and Content-Type. Without these
+settings, use Convex storage; R2 upload and transfer report a configuration error.
+Never put R2 credentials in Vite environment variables.
 
-To learn more about developing your project with Convex, check out:
+## Validate and deploy
 
-- The [Tour of Convex](https://docs.convex.dev/get-started) for a thorough introduction to Convex principles.
-- The rest of [Convex docs](https://docs.convex.dev/) to learn about all Convex features.
-- [Stack](https://stack.convex.dev/) for in-depth articles on advanced topics.
-
-## Join the community
-
-Join thousands of developers building full-stack apps with Convex:
-
-- Join the [Convex Discord community](https://convex.dev/community) to get help in real-time.
-- Follow [Convex on GitHub](https://github.com/get-convex/), star and contribute to the open-source implementation of Convex.
+`npm run check` from the root validates both projects. `npm run test:coverage`
+includes component, HTTP routing, React upload helpers, and example integration
+coverage. [DEPLOY.md](DEPLOY.md) covers coordinated backend/frontend deployment
+and a repeatable smoke checklist.

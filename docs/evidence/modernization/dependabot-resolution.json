@@ -1,0 +1,657 @@
+[
+  {
+    "alert": 140,
+    "package": "zod",
+    "manifest": "example/package-lock.json",
+    "advisory": "GHSA-mrhx-c7xc-m3w5",
+    "severity": "high",
+    "vulnerableRange": "< 4.6.6",
+    "resolvedVersions": [
+      "4.6.7"
+    ]
+  },
+  {
+    "alert": 138,
+    "package": "@vitest/mocker",
+    "manifest": "package-lock.json",
+    "advisory": "GHSA-qxg6-89mg-rqv8",
+    "severity": "medium",
+    "vulnerableRange": ">= 2.1.0-beta.7, < 4.1.12",
+    "resolvedVersions": [
+      "4.1.12"
+    ]
+  },
+  {
+    "alert": 137,
+    "package": "vite",
+    "manifest": "example/package-lock.json",
+    "advisory": "GHSA-9jrq-w75r-8gcw",
+    "severity": "low",
+    "vulnerableRange": ">= 7.0.0, <= 7.3.6",
+    "resolvedVersions": [
+      "8.3.6"
+    ]
+  },
+  {
+    "alert": 136,
+    "package": "vite",
+    "manifest": "example/package-lock.json",
+    "advisory": "GHSA-rq7h-c2jc-7f22",
+    "severity": "medium",
+    "vulnerableRange": ">= 7.0.0, <= 7.3.6",
+    "resolvedVersions": [
+      "8.3.6"
+    ]
+  },
+  {
+    "alert": 135,
+    "package": "vite",
+    "manifest": "package-lock.json",
+    "advisory": "GHSA-9jrq-w75r-8gcw",
+    "severity": "low",
+    "vulnerableRange": ">= 8.2.0, <= 8.2.3",
+    "resolvedVersions": [
+      "8.3.6"
+    ]
+  },
+  {
+    "alert": 134,
+    "package": "vite",
+    "manifest": "package.json",
+    "advisory": "GHSA-9jrq-w75r-8gcw",
+    "severity": "low",
+    "vulnerableRange": ">= 8.2.0, <= 8.2.3",
+    "resolvedVersions": [
+      "8.3.6"
+    ]
+  },
+  {
+    "alert": 133,
+    "package": "vite",
+    "manifest": "package-lock.json",
+    "advisory": "GHSA-rq7h-c2jc-7f22",
+    "severity": "medium",
+    "vulnerableRange": ">= 8.2.0, <= 8.2.3",
+    "resolvedVersions": [
+      "8.3.6"
+    ]
+  },
+  {
+    "alert": 132,
+    "package": "vite",
+    "manifest": "package.json",
+    "advisory": "GHSA-rq7h-c2jc-7f22",
+    "severity": "medium",
+    "vulnerableRange": ">= 8.2.0, <= 8.2.3",
+    "resolvedVersions": [
+      "8.3.6"
+    ]
+  },
+  {
+    "alert": 131,
+    "package": "vite",
+    "manifest": "package-lock.json",
+    "advisory": "GHSA-vfpm-58rq-9qcg",
+    "severity": "medium",
+    "vulnerableRange": ">= 8.2.0, <= 8.2.3",
+    "resolvedVersions": [
+      "8.3.6"
+    ]
+  },
+  {
+    "alert": 130,
+    "package": "vite",
+    "manifest": "package.json",
+    "advisory": "GHSA-vfpm-58rq-9qcg",
+    "severity": "medium",
+    "vulnerableRange": ">= 8.2.0, <= 8.2.3",
+    "resolvedVersions": [
+      "8.3.6"
+    ]
+  },
+  {
+    "alert": 129,
+    "package": "vite",
+    "manifest": "example/package-lock.json",
+    "advisory": "GHSA-r825-w8mm-5pxw",
+    "severity": "medium",
+    "vulnerableRange": ">= 7.0.0, <= 7.3.6",
+    "resolvedVersions": [
+      "8.3.6"
+    ]
+  },
+  {
+    "alert": 128,
+    "package": "vite",
+    "manifest": "example/package-lock.json",
+    "advisory": "GHSA-587h-7wmj-h5pm",
+    "severity": "high",
+    "vulnerableRange": ">= 7.0.0, <= 7.3.6",
+    "resolvedVersions": [
+      "8.3.6"
+    ]
+  },
+  {
+    "alert": 127,
+    "package": "vite",
+    "manifest": "example/package-lock.json",
+    "advisory": "GHSA-698v-4r3x-3vcv",
+    "severity": "medium",
+    "vulnerableRange": ">= 7.0.0, <= 7.3.6",
+    "resolvedVersions": [
+      "8.3.6"
+    ]
+  },
+  {
+    "alert": 126,
+    "package": "vite",
+    "manifest": "package-lock.json",
+    "advisory": "GHSA-r825-w8mm-5pxw",
+    "severity": "medium",
+    "vulnerableRange": ">= 8.2.0, <= 8.2.3",
+    "resolvedVersions": [
+      "8.3.6"
+    ]
+  },
+  {
+    "alert": 125,
+    "package": "vite",
+    "manifest": "package.json",
+    "advisory": "GHSA-r825-w8mm-5pxw",
+    "severity": "medium",
+    "vulnerableRange": ">= 8.2.0, <= 8.2.3",
+    "resolvedVersions": [
+      "8.3.6"
+    ]
+  },
+  {
+    "alert": 124,
+    "package": "vite",
+    "manifest": "package-lock.json",
+    "advisory": "GHSA-587h-7wmj-h5pm",
+    "severity": "high",
+    "vulnerableRange": ">= 8.2.0, <= 8.2.3",
+    "resolvedVersions": [
+      "8.3.6"
+    ]
+  },
+  {
+    "alert": 123,
+    "package": "vite",
+    "manifest": "package.json",
+    "advisory": "GHSA-587h-7wmj-h5pm",
+    "severity": "high",
+    "vulnerableRange": ">= 8.2.0, <= 8.2.3",
+    "resolvedVersions": [
+      "8.3.6"
+    ]
+  },
+  {
+    "alert": 122,
+    "package": "vite",
+    "manifest": "package-lock.json",
+    "advisory": "GHSA-698v-4r3x-3vcv",
+    "severity": "medium",
+    "vulnerableRange": ">= 8.2.0, <= 8.2.3",
+    "resolvedVersions": [
+      "8.3.6"
+    ]
+  },
+  {
+    "alert": 121,
+    "package": "vite",
+    "manifest": "package.json",
+    "advisory": "GHSA-698v-4r3x-3vcv",
+    "severity": "medium",
+    "vulnerableRange": ">= 8.2.0, <= 8.2.3",
+    "resolvedVersions": [
+      "8.3.6"
+    ]
+  },
+  {
+    "alert": 119,
+    "package": "brace-expansion",
+    "manifest": "package-lock.json",
+    "advisory": "GHSA-q2hr-2g5m-vwhr",
+    "severity": "medium",
+    "vulnerableRange": "< 1.1.21",
+    "resolvedVersions": [
+      "1.1.21",
+      "5.0.12"
+    ]
+  },
+  {
+    "alert": 118,
+    "package": "source-map-js",
+    "manifest": "example/package-lock.json",
+    "advisory": "GHSA-68fv-2mgg-jv7q",
+    "severity": "high",
+    "vulnerableRange": ">= 1.0.0, < 1.2.2",
+    "resolvedVersions": [
+      "1.2.2"
+    ]
+  },
+  {
+    "alert": 117,
+    "package": "source-map-js",
+    "manifest": "package-lock.json",
+    "advisory": "GHSA-68fv-2mgg-jv7q",
+    "severity": "high",
+    "vulnerableRange": ">= 1.0.0, < 1.2.2",
+    "resolvedVersions": [
+      "1.2.2"
+    ]
+  },
+  {
+    "alert": 116,
+    "package": "brace-expansion",
+    "manifest": "example/package-lock.json",
+    "advisory": "GHSA-q2hr-2g5m-vwhr",
+    "severity": "medium",
+    "vulnerableRange": "< 1.1.21",
+    "resolvedVersions": [
+      "1.1.21",
+      "5.0.12"
+    ]
+  },
+  {
+    "alert": 115,
+    "package": "shell-quote",
+    "manifest": "example/package-lock.json",
+    "advisory": "GHSA-pqg4-j6r4-53mv",
+    "severity": "critical",
+    "vulnerableRange": ">= 1.8.4, < 1.11.0",
+    "resolvedVersions": [
+      "1.12.0"
+    ]
+  },
+  {
+    "alert": 114,
+    "package": "shell-quote",
+    "manifest": "package-lock.json",
+    "advisory": "GHSA-pqg4-j6r4-53mv",
+    "severity": "critical",
+    "vulnerableRange": ">= 1.8.4, < 1.11.0",
+    "resolvedVersions": [
+      "1.12.0"
+    ]
+  },
+  {
+    "alert": 112,
+    "package": "brace-expansion",
+    "manifest": "package-lock.json",
+    "advisory": "GHSA-q2hr-2g5m-vwhr",
+    "severity": "medium",
+    "vulnerableRange": ">= 2.0.0, < 2.1.7",
+    "resolvedVersions": [
+      "1.1.21",
+      "5.0.12"
+    ]
+  },
+  {
+    "alert": 110,
+    "package": "brace-expansion",
+    "manifest": "example/package-lock.json",
+    "advisory": "GHSA-q2hr-2g5m-vwhr",
+    "severity": "medium",
+    "vulnerableRange": ">= 2.0.0, < 2.1.7",
+    "resolvedVersions": [
+      "1.1.21",
+      "5.0.12"
+    ]
+  },
+  {
+    "alert": 106,
+    "package": "js-yaml",
+    "manifest": "package-lock.json",
+    "advisory": "GHSA-2883-xcg3-v3hh",
+    "severity": "high",
+    "vulnerableRange": ">= 4.0.0, < 4.3.2",
+    "resolvedVersions": [
+      "4.3.2"
+    ]
+  },
+  {
+    "alert": 105,
+    "package": "vitest",
+    "manifest": "package-lock.json",
+    "advisory": "GHSA-82fw-gwwq-j7x9",
+    "severity": "medium",
+    "vulnerableRange": ">= 2.1.0, < 4.1.11",
+    "resolvedVersions": [
+      "4.1.12"
+    ]
+  },
+  {
+    "alert": 104,
+    "package": "js-yaml",
+    "manifest": "example/package-lock.json",
+    "advisory": "GHSA-2883-xcg3-v3hh",
+    "severity": "high",
+    "vulnerableRange": ">= 4.0.0, < 4.3.2",
+    "resolvedVersions": [
+      "4.3.2"
+    ]
+  },
+  {
+    "alert": 103,
+    "package": "@vitest/mocker",
+    "manifest": "package-lock.json",
+    "advisory": "GHSA-82fw-gwwq-j7x9",
+    "severity": "medium",
+    "vulnerableRange": ">= 2.1.0, < 4.1.11",
+    "resolvedVersions": [
+      "4.1.12"
+    ]
+  },
+  {
+    "alert": 78,
+    "package": "react-router",
+    "manifest": "example/package-lock.json",
+    "advisory": "GHSA-chx6-hx7r-mcp5",
+    "severity": "high",
+    "vulnerableRange": ">= 7.0.0, < 7.18.0",
+    "resolvedVersions": [
+      "7.18.5"
+    ]
+  },
+  {
+    "alert": 77,
+    "package": "react-router",
+    "manifest": "example/package-lock.json",
+    "advisory": "GHSA-wrjc-x8rr-h8h6",
+    "severity": "medium",
+    "vulnerableRange": ">= 6.0.0, < 7.18.0",
+    "resolvedVersions": [
+      "7.18.5"
+    ]
+  },
+  {
+    "alert": 76,
+    "package": "react-router",
+    "manifest": "example/package-lock.json",
+    "advisory": "GHSA-jjmj-jmhj-qwj2",
+    "severity": "medium",
+    "vulnerableRange": ">= 7.9.6, <= 7.12.0",
+    "resolvedVersions": [
+      "7.18.5"
+    ]
+  },
+  {
+    "alert": 75,
+    "package": "react-router",
+    "manifest": "example/package-lock.json",
+    "advisory": "GHSA-h8fp-f39c-q6mh",
+    "severity": "medium",
+    "vulnerableRange": ">= 7.11.0, < 7.18.0",
+    "resolvedVersions": [
+      "7.18.5"
+    ]
+  },
+  {
+    "alert": 74,
+    "package": "react-router",
+    "manifest": "example/package-lock.json",
+    "advisory": "GHSA-337j-9hxr-rhxg",
+    "severity": "medium",
+    "vulnerableRange": ">= 6.4.0, < 7.18.0",
+    "resolvedVersions": [
+      "7.18.5"
+    ]
+  },
+  {
+    "alert": 68,
+    "package": "brace-expansion",
+    "manifest": "example/package-lock.json",
+    "advisory": "GHSA-3jxr-9vmj-r5cp",
+    "severity": "high",
+    "vulnerableRange": ">= 2.0.0, < 2.1.2",
+    "resolvedVersions": [
+      "1.1.21",
+      "5.0.12"
+    ]
+  },
+  {
+    "alert": 67,
+    "package": "brace-expansion",
+    "manifest": "example/package-lock.json",
+    "advisory": "GHSA-3jxr-9vmj-r5cp",
+    "severity": "high",
+    "vulnerableRange": "< 1.1.16",
+    "resolvedVersions": [
+      "1.1.21",
+      "5.0.12"
+    ]
+  },
+  {
+    "alert": 59,
+    "package": "ws",
+    "manifest": "example/package-lock.json",
+    "advisory": "GHSA-96hv-2xvq-fx4p",
+    "severity": "high",
+    "vulnerableRange": ">= 8.0.0, < 8.21.0",
+    "resolvedVersions": [
+      "8.21.0"
+    ]
+  },
+  {
+    "alert": 58,
+    "package": "ws",
+    "manifest": "package-lock.json",
+    "advisory": "GHSA-96hv-2xvq-fx4p",
+    "severity": "high",
+    "vulnerableRange": ">= 8.0.0, < 8.21.0",
+    "resolvedVersions": [
+      "8.21.0"
+    ]
+  },
+  {
+    "alert": 57,
+    "package": "vite",
+    "manifest": "example/package-lock.json",
+    "advisory": "GHSA-v6wh-96g9-6wx3",
+    "severity": "medium",
+    "vulnerableRange": ">= 7.0.0, <= 7.3.4",
+    "resolvedVersions": [
+      "8.3.6"
+    ]
+  },
+  {
+    "alert": 56,
+    "package": "vite",
+    "manifest": "example/package-lock.json",
+    "advisory": "GHSA-fx2h-pf6j-xcff",
+    "severity": "medium",
+    "vulnerableRange": ">= 7.0.0, <= 7.3.4",
+    "resolvedVersions": [
+      "8.3.6"
+    ]
+  },
+  {
+    "alert": 51,
+    "package": "react-router",
+    "manifest": "example/package-lock.json",
+    "advisory": "GHSA-rxv8-25v2-qmq8",
+    "severity": "high",
+    "vulnerableRange": ">= 7.0.0, < 7.14.0",
+    "resolvedVersions": [
+      "7.18.5"
+    ]
+  },
+  {
+    "alert": 50,
+    "package": "react-router",
+    "manifest": "example/package-lock.json",
+    "advisory": "GHSA-8x6r-g9mw-2r78",
+    "severity": "high",
+    "vulnerableRange": ">= 7.0.0, < 7.15.0",
+    "resolvedVersions": [
+      "7.18.5"
+    ]
+  },
+  {
+    "alert": 49,
+    "package": "react-router",
+    "manifest": "example/package-lock.json",
+    "advisory": "GHSA-2j2x-hqr9-3h42",
+    "severity": "medium",
+    "vulnerableRange": ">= 7.0.0, < 7.14.1",
+    "resolvedVersions": [
+      "7.18.5"
+    ]
+  },
+  {
+    "alert": 48,
+    "package": "react-router",
+    "manifest": "example/package-lock.json",
+    "advisory": "GHSA-49rj-9fvp-4h2h",
+    "severity": "high",
+    "vulnerableRange": ">= 7.0.0, <= 7.14.1",
+    "resolvedVersions": [
+      "7.18.5"
+    ]
+  },
+  {
+    "alert": 47,
+    "package": "react-router",
+    "manifest": "example/package-lock.json",
+    "advisory": "GHSA-f22v-gfqf-p8f3",
+    "severity": "medium",
+    "vulnerableRange": ">= 7.5.1, < 7.13.2",
+    "resolvedVersions": [
+      "7.18.5"
+    ]
+  },
+  {
+    "alert": 46,
+    "package": "react-router",
+    "manifest": "example/package-lock.json",
+    "advisory": "GHSA-8646-j5j9-6r62",
+    "severity": "high",
+    "vulnerableRange": ">= 7.7.0, < 7.13.2",
+    "resolvedVersions": [
+      "7.18.5"
+    ]
+  },
+  {
+    "alert": 23,
+    "package": "vite",
+    "manifest": "example/package-lock.json",
+    "advisory": "GHSA-4w7w-66w2-5vf9",
+    "severity": "medium",
+    "vulnerableRange": ">= 7.0.0, <= 7.3.1",
+    "resolvedVersions": [
+      "8.3.6"
+    ]
+  },
+  {
+    "alert": 22,
+    "package": "vite",
+    "manifest": "example/package-lock.json",
+    "advisory": "GHSA-v2wj-q39q-566r",
+    "severity": "high",
+    "vulnerableRange": ">= 7.1.0, <= 7.3.1",
+    "resolvedVersions": [
+      "8.3.6"
+    ]
+  },
+  {
+    "alert": 21,
+    "package": "vite",
+    "manifest": "example/package-lock.json",
+    "advisory": "GHSA-p9ff-h696-f583",
+    "severity": "high",
+    "vulnerableRange": ">= 7.0.0, <= 7.3.1",
+    "resolvedVersions": [
+      "8.3.6"
+    ]
+  },
+  {
+    "alert": 20,
+    "package": "lodash",
+    "manifest": "example/package-lock.json",
+    "advisory": "GHSA-r5fr-rjxr-66jc",
+    "severity": "high",
+    "vulnerableRange": ">= 4.0.0, <= 4.17.23",
+    "resolvedVersions": [
+      "4.18.1"
+    ]
+  },
+  {
+    "alert": 12,
+    "package": "minimatch",
+    "manifest": "example/package-lock.json",
+    "advisory": "GHSA-7r86-cg39-jmmj",
+    "severity": "high",
+    "vulnerableRange": "< 3.1.3",
+    "resolvedVersions": [
+      "10.2.6",
+      "3.1.5"
+    ]
+  },
+  {
+    "alert": 11,
+    "package": "minimatch",
+    "manifest": "example/package-lock.json",
+    "advisory": "GHSA-7r86-cg39-jmmj",
+    "severity": "high",
+    "vulnerableRange": ">= 9.0.0, < 9.0.7",
+    "resolvedVersions": [
+      "10.2.6",
+      "3.1.5"
+    ]
+  },
+  {
+    "alert": 8,
+    "package": "rollup",
+    "manifest": "example/package-lock.json",
+    "advisory": "GHSA-mw96-cpmx-2vgc",
+    "severity": "high",
+    "vulnerableRange": ">= 4.0.0, < 4.59.0",
+    "resolvedVersions": []
+  },
+  {
+    "alert": 4,
+    "package": "lodash",
+    "manifest": "example/package-lock.json",
+    "advisory": "GHSA-xxjr-mmjv-4gpg",
+    "severity": "medium",
+    "vulnerableRange": ">= 4.0.0, <= 4.17.22",
+    "resolvedVersions": [
+      "4.18.1"
+    ]
+  },
+  {
+    "alert": 3,
+    "package": "react-router",
+    "manifest": "example/package-lock.json",
+    "advisory": "GHSA-h5cw-625j-3rxh",
+    "severity": "medium",
+    "vulnerableRange": ">= 7.0.0, <= 7.11.0",
+    "resolvedVersions": [
+      "7.18.5"
+    ]
+  },
+  {
+    "alert": 2,
+    "package": "react-router",
+    "manifest": "example/package-lock.json",
+    "advisory": "GHSA-2w69-qvjg-hvjx",
+    "severity": "high",
+    "vulnerableRange": ">= 7.0.0, <= 7.11.0",
+    "resolvedVersions": [
+      "7.18.5"
+    ]
+  },
+  {
+    "alert": 1,
+    "package": "react-router",
+    "manifest": "example/package-lock.json",
+    "advisory": "GHSA-8v8x-cx79-35w7",
+    "severity": "high",
+    "vulnerableRange": ">= 7.0.0, < 7.12.0",
+    "resolvedVersions": [
+      "7.18.5"
+    ]
+  }
+]

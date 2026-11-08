@@ -27,31 +27,37 @@
   "scripts": {
     "dev": "run-p -r 'dev:*'",
     "dev:backend": "convex dev --typecheck-components",
-    "dev:frontend": "cd example && vite --clearScreen false",
+    "dev:frontend": "npm --prefix example run dev:frontend",
     "dev:build": "chokidar 'tsconfig*.json' 'src/**/*.ts' -i '**/*.test.ts' -c 'npm run build:codegen' --initial",
-    "predev": "path-exists .env.local dist || (npm run build && convex dev --once)",
+    "predev": "npm run build",
     "build": "tsc --project ./tsconfig.build.json",
     "build:codegen": "npx convex codegen --component-dir ./src/component && npm run build",
     "build:clean": "rm -rf dist *.tsbuildinfo && npm run build:codegen",
     "verify:dist-esm": "node ./scripts/check-dist-esm.mjs",
     "typecheck": "tsc --noEmit",
-    "typecheck:all": "tsc --noEmit && tsc -p example && tsc -p example/convex",
+    "typecheck:all": "npm run typecheck && npm --prefix example run typecheck",
     "lint": "eslint src/",
     "all": "run-p -r 'dev:*' 'test:watch'",
     "test": "vitest run --typecheck",
     "test:watch": "vitest --typecheck --clearScreen false",
     "test:debug": "vitest --inspect-brk --no-file-parallelism",
     "test:coverage": "vitest run --coverage --coverage.reporter=text",
-    "preversion": "npm ci && npm run build:clean && run-p test lint typecheck verify:dist-esm",
+    "preversion": "npm ci && npm --prefix example ci && npm run build:clean && npm run check",
     "prepublishOnly": "npm run build:clean && npm run verify:dist-esm",
     "alpha": "npm version prerelease --preid alpha && npm publish --tag alpha && git push --follow-tags",
     "release": "npm version patch && npm publish && git push --follow-tags",
     "version": "vim -c 'normal o' -c 'normal o## '$npm_package_version CHANGELOG.md && prettier -w CHANGELOG.md && git add CHANGELOG.md",
-    "check": "npm run build:clean && npm run typecheck && npm run lint && npm run test && npm run verify:dist-esm"
+    "check": "npm run build && npm run typecheck:all && npm run lint:all && npm test && npm run verify:dist-esm && npm --prefix example run build",
+    "lint:all": "npm run lint && npm --prefix example run lint",
+    "build:example": "npm run build && npm --prefix example run build",
+    "demo:build": "npm run build && convex deploy --cmd-url-env-var-name VITE_CONVEX_URL --cmd \"npm --prefix example run build\"",
+    "demo:deploy": "npm run demo:build && npm --prefix example exec -- wrangler pages deploy example/dist --project-name=convex-files-control-example --branch=main"
   },
   "files": [
     "dist",
-    "src"
+    "src",
+    "!src/**/*.test.ts",
+    "!src/__tests__/**"
   ],
   "exports": {
     "./package.json": "./package.json",
@@ -81,48 +87,42 @@
   },
   "dependencies": {
     "@aws-crypto/sha256-js": "^5.2.0",
-    "@aws-sdk/client-s3": "^3.1053.0",
-    "@aws-sdk/s3-request-presigner": "^3.1053.0",
-    "@convex-dev/action-retrier": "^0.3.0",
-    "convex-helpers": "^0.1.118"
+    "@aws-sdk/client-s3": "^3.1164.0",
+    "@aws-sdk/s3-request-presigner": "^3.1164.0",
+    "@convex-dev/action-retrier": "^0.3.1",
+    "convex-helpers": "^0.1.134"
   },
   "peerDependencies": {
-    "convex": "^1.29.3",
+    "convex": "^1.46.0",
     "react": "^18.3.1 || ^19.0.0"
   },
-  "overrides": {
-    "ws": "8.20.1"
-  },
   "devDependencies": {
-    "@convex-dev/eslint-plugin": "^1.2.1",
     "@edge-runtime/vm": "^5.0.0",
-    "@eslint/eslintrc": "^3.3.5",
-    "@eslint/js": "9.39.2",
-    "@types/node": "^24.12.0",
-    "@types/react": "^19.2.15",
-    "@types/react-dom": "^19.2.3",
+    "@eslint/js": "9.39.5",
+    "@types/node": "^24.19.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^5.2.0",
-    "@vitest/coverage-v8": "^4.1.7",
+    "@vitest/coverage-v8": "4.1.12",
     "chokidar-cli": "3.0.0",
-    "convex": "1.45.0",
-    "convex-test": "0.0.59",
-    "cpy-cli": "^6.0.0",
-    "eslint": "9.39.2",
-    "eslint-plugin-react": "^7.37.5",
-    "eslint-plugin-react-hooks": "^7.0.1",
+    "convex": "1.49.0",
+    "convex-test": "0.0.67",
+    "eslint": "9.39.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.4.26",
     "globals": "^16.5.0",
     "npm-run-all2": "8.0.4",
-    "path-exists-cli": "2.0.0",
-    "pkg-pr-new": "^0.0.75",
-    "prettier": "3.8.3",
-    "react": "^19.2.6",
-    "react-dom": "^19.2.6",
+    "prettier": "3.9.10",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "typescript": "5.9.3",
-    "typescript-eslint": "8.57.1",
-    "vite": "8.2.2",
-    "vitest": "4.1.7"
+    "typescript-eslint": "8.72.1",
+    "vite": "8.3.6",
+    "vitest": "4.1.12"
   },
   "types": "./dist/client/index.d.ts",
-  "module": "./dist/client/index.js"
+  "module": "./dist/client/index.js",
+  "engines": {
+    "node": ">=22.12.0"
+  }
 }

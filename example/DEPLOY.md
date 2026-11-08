@@ -1,151 +1,74 @@
-# Deploying to Cloudflare Pages
+# Deploy the shared demo
 
-This guide will help you deploy the example app to Cloudflare Pages.
+Run all commands from the repository root. The public frontend is
+https://convex-files-control-example.pages.dev. Publishing this frontend does not
+publish the npm library; it bundles the local `file:..` package.
 
-## Prerequisites
+## Check the destination first
 
-1. **Cloudflare account** - Sign up at [cloudflare.com](https://www.cloudflare.com)
-2. **Wrangler CLI** - Cloudflare's command-line tool
-
-## Step-by-Step Deployment
-
-### Step 1: Install Wrangler CLI
-
-If you don't have Wrangler installed, install it globally:
-
-```bash
-npm install -g wrangler
+```sh
+npm ci
+npm --prefix example ci
+npm run check
+npm --prefix example exec -- wrangler whoami
+npm --prefix example exec -- wrangler pages project list
+npx convex env list --prod --names-only
 ```
 
-Or use it via npx (no installation needed):
+The Cloudflare account must own `convex-files-control-example`. If it is absent,
+sign into its owning account; do not create a similarly named replacement.
+Confirm the intended Convex project/deployment in the CLI output. The old demo
+used the **development** backend `intent-tiger-143`; a different root `.env.local`
+may select another project. Do not assume `convex deploy` targets that old backend:
+it targets the selected project's default **production** deployment.
 
-```bash
-npx wrangler --version
+Before a first production deployment, configure Convex Auth for that deployment
+(`SITE_URL`, `JWT_PRIVATE_KEY`, `JWKS`) and optional R2 credentials. Configure auth
+using the installed CLI with `--prod --web-server-url` and the frontend URL.
+Do not rotate existing auth keys just to redeploy. Seed a fresh deployment after
+its functions are deployed with `npx convex run --prod seed:demoUsers`.
+
+## Coordinated production publish
+
+```sh
+npm run demo:deploy
 ```
 
-### Step 2: Login to Cloudflare
+This builds the local library, runs `convex deploy` with the frontend build as
+`--cmd`, then publishes `example/dist` to the Pages production branch `main`.
+Convex supplies `VITE_CONVEX_URL` to the build; HTTP actions use the matching
+`.convex.site` origin, even if root `.env.local` contains a development site URL.
+Wrangler runtime `vars` cannot configure a Vite bundle that has already been built.
+The Convex CLI displays the backend destination before deployment.
 
-Authenticate with Cloudflare:
+For Pages Git integration, use the repository root, output `example/dist`, and
+build command `npm ci && npm --prefix example ci && npm run demo:build`.
+Configure a deployment-specific `CONVEX_DEPLOY_KEY` as a secret and Node 24 in the
+hosting environment. Restrict production keys to trusted production builds.
 
-```bash
-wrangler login
+## Frontend preview against an already deployed backend
+
+```sh
+VITE_CONVEX_URL=https://YOUR-DEPLOYMENT.convex.cloud npm run build:example
+npm --prefix example exec -- wrangler pages deploy example/dist --project-name=convex-files-control-example --branch=modernization-preview
 ```
 
-This will open a browser window for you to authorize Wrangler.
+This only updates the frontend. Deploy the corresponding backend to a development
+or preview deployment first; it must support the same API as the frontend.
 
-### Step 3: Navigate to the Example Directory
+## Smoke checks
 
-```bash
-cd example
-```
+- Select Alice; upload a small text file by presigned URL and HTTP Action.
+- Confirm name, size, virtual path, provider, and expiration in the file table.
+- Download and compare contents with the original.
+- Generate a share link; check correct/incorrect passwords and exhausted links.
+- Switch to Bob and confirm Alice's uploads are absent from “Your Uploads”.
+- Return to Alice and delete only the files created for this smoke test.
+- Check the HTTP route rejects files over 5MB and missing authentication.
+- With R2 configured, test R2 upload and a Convex → R2 → Convex round trip.
+- Check desktop/mobile layouts and the browser console.
 
-### Step 4: Install Dependencies
-
-Make sure all dependencies are installed:
-
-```bash
-npm install
-```
-
-### Step 5: Build the Application
-
-Build the Vite app for production:
-
-```bash
-npm run build
-```
-
-This will create a `dist` folder with the production build.
-
-### Step 6: Deploy to Cloudflare Pages
-
-Deploy using Wrangler:
-
-```bash
-wrangler pages deploy dist --project-name=convex-files-control-example
-```
-
-Or if you want to use the environment variable from wrangler.toml:
-
-```bash
-VITE_CONVEX_URL=https://intent-tiger-143.convex.cloud npm run build
-wrangler pages deploy dist --project-name=convex-files-control-example
-```
-
-### Step 7: Set Environment Variable (Alternative Method)
-
-If you prefer to set the environment variable in the Cloudflare dashboard:
-
-1. Go to [Cloudflare Dashboard](https://dash.cloudflare.com)
-2. Navigate to **Workers & Pages** → Your project
-3. Go to **Settings** → **Environment Variables**
-4. Add a new variable:
-   - **Variable name**: `VITE_CONVEX_URL`
-   - **Value**: `https://intent-tiger-143.convex.cloud`
-5. Save and redeploy
-
-## Quick Deploy Script
-
-You can also create a deploy script. Add this to your `package.json`:
-
-```json
-"scripts": {
-  "deploy": "VITE_CONVEX_URL=https://intent-tiger-143.convex.cloud npm run build && wrangler pages deploy dist --project-name=convex-files-control-example"
-}
-```
-
-Then simply run:
-
-```bash
-npm run deploy
-```
-
-## Continuous Deployment (Optional)
-
-For automatic deployments, you can connect your GitHub repository to Cloudflare Pages:
-
-1. Go to Cloudflare Dashboard → **Workers & Pages** → **Create application**
-2. Select **Pages** → **Connect to Git**
-3. Select your repository
-4. Configure:
-   - **Project name**: `convex-files-control-example`
-   - **Production branch**: `main` (or your default branch)
-   - **Build command**: `npm run build`
-   - **Build output directory**: `dist`
-   - **Root directory**: `example`
-5. Add environment variable:
-   - **Variable name**: `VITE_CONVEX_URL`
-   - **Value**: `https://intent-tiger-143.convex.cloud`
-6. Save and deploy
-
-## Troubleshooting
-
-### Build fails with missing environment variable
-
-Make sure to set `VITE_CONVEX_URL` before building:
-
-```bash
-VITE_CONVEX_URL=https://intent-tiger-143.convex.cloud npm run build
-```
-
-### Deployment fails
-
-- Check that you're logged in: `wrangler whoami`
-- Verify the `dist` folder exists after building
-- Check Cloudflare dashboard for error logs
-
-### App doesn't work after deployment
-
-- Verify the environment variable is set correctly in Cloudflare dashboard
-- Check browser console for errors
-- Ensure the Convex URL is accessible
-
-## Your Deployment URL
-
-After successful deployment, Cloudflare will provide you with a URL like:
-`https://convex-files-control-example.pages.dev`
-
-You can also set up a custom domain in the Cloudflare Pages dashboard.
-
-
-
+Record the commit SHA, backend destination, Pages deployment URL, and results.
+The public demo's impersonation and shared admin view are intentional; use test
+data only. Before a production rollout, retain the preceding Pages deployment
+and backend commit. A frontend rollback alone does not roll back Convex functions.
