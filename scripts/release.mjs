@@ -137,8 +137,7 @@ export async function registryVersion(info, fetcher = fetch) {
   return true;
 }
 
-export async function preventLatestRollback(info, fetcher = fetch) {
-  if (info.prerelease) return;
+async function registryLatest(info, fetcher = fetch) {
   const response = await fetcher(
     `${registry}/${encodeURIComponent(info.name)}/latest`,
     {
@@ -151,6 +150,13 @@ export async function preventLatestRollback(info, fetcher = fetch) {
   const latest = (await response.json()).version;
   if (!/^\d+\.\d+\.\d+$/.test(latest))
     throw new Error("Unexpected latest version; inspect npm before releasing.");
+  return latest;
+}
+
+export async function preventLatestRollback(info, fetcher = fetch) {
+  if (info.prerelease) return;
+  const latest = await registryLatest(info, fetcher);
+  if (!latest) return;
   const previous = latest.split(".").map(Number);
   const next = info.version.split(".").map(Number);
   const difference =
@@ -365,6 +371,9 @@ async function main(command) {
       ].map((file) => `release/${file}`),
     ]);
     // Preserve curated draft release notes (including the prepared 0.6.0 notes).
+    // Finishing an older release after a newer npm publish must not make it latest.
+    const isLatest =
+      !info.prerelease && (await registryLatest(info)) === info.version;
     run("gh", [
       "release",
       "edit",
@@ -373,7 +382,7 @@ async function main(command) {
       repository,
       "--draft=false",
       `--prerelease=${info.prerelease}`,
-      `--latest=${!info.prerelease}`,
+      `--latest=${isLatest}`,
     ]);
     console.log(
       `Published https://github.com/${repository}/releases/tag/${info.tag}`,
