@@ -8,6 +8,12 @@ credentials are required. The demo has a separate
 
 ## One-time setup
 
+The main-branch protection rule requires CodeQL results. GitHub CodeQL default
+setup is configured in repository Settings → Code security for
+JavaScript/TypeScript and GitHub Actions. Let the initial setup scan finish and
+require successful PR analysis before merging release changes. The scan is
+managed by GitHub and does not require another workflow file or secret.
+
 1. Merge `.github/workflows/release.yml` into `main`.
 2. Create a GitHub environment named **`npm`** in repository Settings →
    Environments. Restrict deployment branches/tags to branch **`main`** and tags
