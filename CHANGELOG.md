@@ -1,15 +1,52 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 (2026-11-08)
 
-- Update Convex to 1.49, helpers to 0.1.134, action retrier to 0.3.1, Convex
-  Test to 0.0.67, and both dependency lockfiles. The library now requires Convex
-  1.46+ (helpers peer requirement) and Node 22.12+.
-- Preserve virtual paths in React HTTP uploads.
-- Repair example installs, HTTP size/expiration enforcement, upload feedback,
-  deployment URL selection, share filenames, and local setup documentation.
-- Validate both projects in CI, retain check/audit artifacts, and exclude tests
-  from the published package.
+### Compatibility
+
+- Requires Convex **1.46.0 or newer** and Node **22.12.0 or newer** (Node 24
+  recommended). The Convex minimum follows the updated convex-helpers peer
+  requirement. React 18.3.1 and React 19 remain supported.
+- Upgrade Convex alongside this package and regenerate your app's bindings
+  before deploying. No component schema/data migration is required.
+
+### Fixes
+
+- Preserve `virtualPath` in React HTTP uploads; the server's
+  `checkUploadRequest` hook remains responsible for validating and accepting it.
+- Repair the example's Convex Auth/Auth.js peer conflict and remove its fallback
+  to the public demo backend.
+- Enforce the example's 5MB HTTP upload limit and reject invalid/past expiration
+  timestamps before storing a file. Keep component and example expiration in
+  sync so cleanup deletes the stored object as well as the demo record.
+- Restore upload notifications, preserve share-link filenames, and refresh
+  expiration controls as time passes.
+- Pair frontend RPC and HTTP-action deployment URLs during production builds.
+
+### Dependencies and tooling
+
+- Update development Convex to 1.49.0, convex-helpers to 0.1.134, action-retrier
+  to 0.3.1, convex-test to 0.0.67, and example Convex Auth to 0.0.96.
+- Refresh AWS SDK, React, Vite, router, Zod, and both dependency lockfiles;
+  remove the vulnerable `ws` override and unused tooling.
+- Address all 59 Dependabot alerts open at the modernization audit. Both
+  production dependency audits are clean. A moderate development-only minimatch
+  advisory remains in the ESLint dependency chain; see the evidence report.
+- Validate both library and example in CI on Node 22 and 24, retain validation
+  artifacts, and group maintenance updates through Dependabot.
+- Exclude tests from the published package; retain the `./test` integration
+  export.
+- Refresh contributor and demo deployment documentation, add internal demo-user
+  seeding, and remove obsolete setup scaffolding.
+
+### Validation
+
+- 161 tests pass; library coverage is 98.38% statements, 98.75% branches, 100%
+  functions, and 98.36% lines.
+- Verify package exports with Convex 1.46.0/React 18.3.1, actual development
+  backend push/codegen, and browser upload/download/sharing flows.
+- See [the validation report](docs/evidence/modernization/README.md) for logs,
+  screenshots, a browser recording, and remaining deployment limitations.
 
 ## 0.5.9 (2026-09-23)
 
