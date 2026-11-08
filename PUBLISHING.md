@@ -100,6 +100,9 @@ The workflow:
    provenance enabled. The publish job does not install project dependencies.
 6. Verifies npm's recorded integrity, then creates or publishes the GitHub
    release with notes, the package, checksum, manifest, and validation log.
+   npm may process an accepted publish asynchronously. This step makes up to
+   13 registry checks, waiting 15 seconds between missing-version responses.
+   Registry errors and different package contents stop the release immediately.
    Existing curated draft notes are preserved.
 
 Dry runs perform steps 1–3 and report tag conflicts. They create no tags, GitHub
@@ -114,18 +117,15 @@ artifact and the original commit. If npm already accepted those exact bytes, the
 publish job skips publication and finishes the GitHub release. Registry outages
 and authentication errors are not treated as missing versions.
 
+If npm takes longer than the automatic wait to process the package, the GitHub
+release stays unpublished. Wait until the version appears on npm, then re-run the
+failed job; do not publish the package again.
+
 If artifacts have expired, run the workflow against the exact version tag
 instead of the newer main branch. A rebuilt tarball must have the same npm
 integrity before an existing version can be reused. A published GitHub release
 is left unchanged. Never delete an npm version or move a published tag to fix a
 failed job; use a new version if the content differs.
-
-The prepared **v0.6.0** tag predates this workflow. Running a real release from
-new main will therefore stop at the tag guard. Before its first CI publish,
-choose explicitly between a new version/tag or recreating the still-unpublished
-v0.6.0 tag at the commit containing this workflow. The automation does not make
-that decision or change the existing tag. The draft's curated release notes will
-be preserved if v0.6.0 is intentionally aligned.
 
 ## Local package inspection
 

@@ -7,6 +7,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { resolve } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
 
 export const packageName = "@gilhrpenner/convex-files-control";
@@ -135,6 +136,26 @@ export async function registryVersion(info, fetcher = fetch) {
     );
   }
   return true;
+}
+
+export async function waitForRegistryVersion(
+  info,
+  fetcher = fetch,
+  wait = delay,
+) {
+  // npm can accept a publish before its asynchronous processing exposes it.
+  // Retry only 404; registry failures and integrity mismatches still stop us.
+  for (let attempt = 0; attempt < 13; attempt++) {
+    if (await registryVersion(info, fetcher)) return;
+    if (attempt < 12) {
+      console.log("npm is still processing this version; checking again in 15s.");
+      await wait(15_000);
+    }
+  }
+  throw new Error(
+    "npm publication must be verified before publishing the GitHub release. " +
+      "The version is still unavailable; re-run failed jobs after npm finishes processing.",
+  );
 }
 
 async function registryLatest(info, fetcher = fetch) {
@@ -347,10 +368,7 @@ async function main(command) {
     );
   } else if (command === "github-release") {
     const info = metadata();
-    if (!(await registryVersion(info)))
-      throw new Error(
-        "npm publication must be verified before publishing the GitHub release.",
-      );
+    await waitForRegistryVersion(info);
     // Distinguish a missing release from an API/authentication failure.
     const existing = JSON.parse(
       run("gh", [
