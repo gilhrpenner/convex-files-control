@@ -47,6 +47,15 @@ jobs:
           set -o pipefail
           npm run test:coverage 2>&1 | tee evidence/coverage.log
           npm pack --dry-run --json > evidence/package.json
+      - name: Validate release guards and tarball
+        if: matrix.node == 24
+        shell: bash
+        run: |
+          node --test scripts/release.test-node.mjs
+          node scripts/release.mjs prepare
+          node scripts/release.mjs pack
+          node scripts/release.mjs verify
+          cp release/package-manifest.json evidence/release-package.json
       - name: Dependency security gate
         shell: bash
         run: |
