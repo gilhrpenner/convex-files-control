@@ -171,6 +171,28 @@ export async function preventLatestRollback(info, fetcher = fetch) {
 
 const run = (command, args) =>
   execFileSync(command, args, { encoding: "utf8" }).trim();
+
+export async function publicationPreflight(
+  info,
+  fetcher = fetch,
+  execute = run,
+) {
+  // npm applies version collisions even with --dry-run. Reuse only exact bytes.
+  if (await registryVersion(info, fetcher)) return true;
+  await preventLatestRollback(info, fetcher);
+  await execute("npm", [
+    "publish",
+    `./release/${info.filename}`,
+    "--dry-run",
+    "--ignore-scripts",
+    "--access",
+    "public",
+    "--tag",
+    info.distTag,
+  ]);
+  return false;
+}
+
 const readJson = (path) => JSON.parse(readFileSync(path, "utf8"));
 function output(key, value) {
   if (process.env.GITHUB_OUTPUT)
@@ -275,6 +297,13 @@ async function main(command) {
   } else if (command === "verify") {
     const info = metadata();
     console.log(`Verified ${info.filename}: ${info.integrity}`);
+  } else if (command === "preflight") {
+    const exists = await publicationPreflight(metadata());
+    console.log(
+      exists
+        ? "Identical published package passed validation without republishing."
+        : "npm publication dry run passed.",
+    );
   } else if (command === "registry") {
     const info = metadata();
     const exists = await registryVersion(info);
@@ -389,7 +418,7 @@ async function main(command) {
     );
   } else {
     throw new Error(
-      "Expected prepare, pack, verify, registry, check-tag, create-tag, or github-release.",
+      "Expected prepare, pack, verify, preflight, registry, check-tag, create-tag, or github-release.",
     );
   }
 }

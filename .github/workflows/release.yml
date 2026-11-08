@@ -70,9 +70,7 @@ jobs:
         run: |
           node scripts/release.mjs pack
           node scripts/release.mjs verify
-          npm publish "./release/${FILENAME}" --dry-run --ignore-scripts --access public
-        env:
-          FILENAME: ${{ steps.metadata.outputs.filename }}
+          node scripts/release.mjs preflight
       - name: Verify the tag can be created or reused
         if: github.event_name != 'workflow_dispatch' || !inputs.dry_run
         run: node scripts/release.mjs check-tag

@@ -6,6 +6,7 @@ import {
   checkPackedFiles,
   packageName,
   preventLatestRollback,
+  publicationPreflight,
   registryVersion,
   releaseInfo,
   verifyIntegrity,
@@ -215,5 +216,71 @@ test("an old tag cannot roll npm latest backwards", async () => {
   await assert.rejects(
     preventLatestRollback(info(), response(500)),
     /lookup failed/,
+  );
+});
+
+test("publication preflight supplies the selected prerelease channel to npm", async () => {
+  for (const channel of ["alpha", "beta", "rc"]) {
+    const release = info(`0.7.0-${channel}.1`);
+    const calls = [];
+    assert.equal(
+      await publicationPreflight(release, response(404), (...args) =>
+        calls.push(args),
+      ),
+      false,
+    );
+    assert.equal(calls.length, 1);
+    assert.deepEqual(calls[0], [
+      "npm",
+      [
+        "publish",
+        `./release/${release.filename}`,
+        "--dry-run",
+        "--ignore-scripts",
+        "--access",
+        "public",
+        "--tag",
+        channel,
+      ],
+    ]);
+  }
+});
+
+test("fresh publication preflight accepts identical published bytes without invoking npm publish", async () => {
+  const release = { ...info(), integrity: "sha512-example" };
+  const published = {
+    name: release.name,
+    version: release.version,
+    dist: { integrity: release.integrity },
+  };
+  assert.equal(
+    await publicationPreflight(release, response(200, published), () => {
+      assert.fail(
+        "npm publish must be skipped even for a dry run of an existing version",
+      );
+    }),
+    true,
+  );
+});
+
+test("publication preflight rejects collisions and registry outages before invoking npm", async () => {
+  const release = { ...info(), integrity: "sha512-example" };
+  const mustNotPublish = () =>
+    assert.fail("npm publish must not run after a failed registry guard");
+  await assert.rejects(
+    publicationPreflight(
+      release,
+      response(200, {
+        name: release.name,
+        version: release.version,
+        dist: { integrity: "different" },
+      }),
+      mustNotPublish,
+    ),
+    /different contents/,
+  );
+  await assert.rejects(
+    publicationPreflight(release, response(500), mustNotPublish),
+    /Registry lookup failed/,
   );
 });
