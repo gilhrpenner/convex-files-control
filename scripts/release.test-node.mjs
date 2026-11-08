@@ -10,6 +10,7 @@ import {
   registryVersion,
   releaseInfo,
   verifyIntegrity,
+  waitForRegistryVersion,
 } from "./release.mjs";
 
 function fixture(version = "0.6.0") {
@@ -196,6 +197,77 @@ test("retry accepts identical published bytes and rejects a version collision", 
     registryVersion(release, response(200, { ...published, version: "0.5.9" })),
     /different contents/,
   );
+});
+
+test("GitHub release waits for npm processing and verifies the resulting bytes", async () => {
+  const release = { ...info(), integrity: "sha512-example" };
+  const published = {
+    name: release.name,
+    version: release.version,
+    dist: { integrity: release.integrity },
+  };
+  let lookups = 0;
+  const delays = [];
+  await waitForRegistryVersion(
+    release,
+    async () => {
+      lookups++;
+      return response(lookups < 3 ? 404 : 200, published)();
+    },
+    async (ms) => delays.push(ms),
+  );
+  assert.equal(lookups, 3);
+  assert.deepEqual(delays, [15_000, 15_000]);
+});
+
+test("GitHub release stops after a bounded wait if npm never exposes the version", async () => {
+  let lookups = 0;
+  const delays = [];
+  await assert.rejects(
+    waitForRegistryVersion(
+      info(),
+      async () => {
+        lookups++;
+        return response(404)();
+      },
+      async (ms) => delays.push(ms),
+    ),
+    /npm publication must be verified/,
+  );
+  assert.equal(lookups, 13);
+  assert.equal(delays.length, 12);
+});
+
+test("waiting for publication fails immediately on registry errors or different bytes", async () => {
+  const release = { ...info(), integrity: "sha512-example" };
+  for (const fetcher of [
+    response(401),
+    response(403),
+    response(429),
+    response(500),
+    response(200, {
+      name: release.name,
+      version: release.version,
+      dist: { integrity: "different" },
+    }),
+    async () => {
+      throw new Error("network unavailable");
+    },
+  ]) {
+    let lookups = 0;
+    await assert.rejects(
+      waitForRegistryVersion(
+        release,
+        async (...args) => {
+          lookups++;
+          return fetcher(...args);
+        },
+        async () => assert.fail("only a missing version should be retried"),
+      ),
+      /Registry lookup failed|different contents|network unavailable/,
+    );
+    assert.equal(lookups, 1);
+  }
 });
 
 test("an old tag cannot roll npm latest backwards", async () => {
