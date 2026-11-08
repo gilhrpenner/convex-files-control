@@ -1,88 +1,146 @@
 # Publishing
 
-Use Node 24. Before releasing, install both projects (`npm ci` and
-`npm --prefix example ci`) and run `npm run check`. See
-[example/DEPLOY.md](example/DEPLOY.md) to publish the demo separately.
+Releases use
+[GitHub Actions](https://github.com/gilhrpenner/convex-files-control/actions/workflows/release.yml)
+and npm trusted publishing (OIDC). No `NPM_TOKEN`, local npm login, or Convex
+credentials are required. The demo has a separate
+[deployment procedure](example/DEPLOY.md).
 
-In order for other people to install and use this component, you can publish the
-package to npm.
+## One-time setup
 
-You will first need to have an npmjs account with permissions to push to your
-package name.
+The main-branch protection rule requires CodeQL results. GitHub CodeQL default
+setup is configured in repository Settings → Code security for
+JavaScript/TypeScript and GitHub Actions. Let the initial setup scan finish and
+require successful PR analysis before merging release changes. The scan is
+managed by GitHub and does not require another workflow file or secret.
 
-If this is your first time, here are the recommended steps:
+1. Merge `.github/workflows/release.yml` into `main`.
+2. Create a GitHub environment named **`npm`** in repository Settings →
+   Environments. Restrict deployment branches/tags to branch **`main`** and tags
+   **`v*`**. Add required reviewers if you want an approval before npm
+   publishing; leave reviewers unset for automatic releases after validation.
+3. In the npm package's
+   [settings](https://www.npmjs.com/package/@gilhrpenner/convex-files-control/access),
+   add this trusted publisher:
 
-1. Ensure the package.json "name" matches what you want it to be called. It
-   should either be like `my-package` or `@my-org/my-package`. If it's the
-   latter, ensure you have an npmjs account with permissions to push to
-   `my-org`.
-2. `npm login` to login to npmjs.
-3. `npm run build:clean` to clean your `/dist` directory.
-4. `npm ci` to install the dependencies with the versions specified in
-   `package-lock.json`.
-5. `npm run build` to build the package fresh.
-6. (Optional) `npm run typecheck` to typecheck the package.
-7. (Optional) `npm run lint` to lint the package.
-8. (Optional) `npm run test` to test the package.
-9. (Optional) `npm pack` will create a .tgz file of the package. You can then
-   try installing it in another project with
-   `npm install ./path/to/your-package.tgz` to sanity check that it works as
-   expected. You can remove the .tgz file after.
-10. `npm publish --access public` to publish the package to npm.
-11. `git tag v0.1.0` to tag the new version.
-12. `git push --follow-tags` to push the tags to the repository. This way, other
-    contributors can always see what code was published with each version.
-    Running `npm version ...` will create these tags and commits automatically.
+   | Field                | Value                                      |
+   | -------------------- | ------------------------------------------ |
+   | Provider             | GitHub Actions                             |
+   | Organization or user | `gilhrpenner`                              |
+   | Repository           | `convex-files-control`                     |
+   | Workflow filename    | `release.yml` (no directory prefix)        |
+   | Environment          | `npm`                                      |
+   | Allowed actions      | Allow direct publishing with `npm publish` |
 
-After the initial publish, you can use the release scripts documented below,
-which will do steps 3-12 automatically (except the sanity check in step 9).
+   Dist-tag management permission is not needed: `npm publish --tag` sets the
+   initial tag. Do not create a granular access token or GitHub npm secret.
 
-## Package scripts for releasing
+4. Complete the first publish within **two days** of creating the npm trust
+   configuration. npm expires configurations that have not published within that
+   window; recreate the configuration if it expires.
+5. After the first successful publish, npm recommends setting Publishing access
+   to **Require two-factor authentication and disallow tokens**. Trusted
+   publishing continues to work. Revoke unused publishing tokens.
 
-In package.json, there are some scripts that are useful for doing releases.
+The workflow uses GitHub-hosted runners, Node 24.16.0 and npm 12.2.2. npm
+requires CLI 11.5.1+ and Node 22.14.0+ for trusted publishing. The npm job
+requests `id-token: write`; all other jobs have no OIDC permission. npm
+generates signed provenance for this public repository/package.
 
-- `preversion` will run the tests and typecheck the code before marking a new
-  version.
-- `version` will open the changelog in vim and then save it before committing
-  the new version.
-- `prepublishOnly` will make a clean build of the package before publishing.
+See npm's
+[trusted publishing documentation](https://docs.npmjs.com/trusted-publishers/).
 
-These are not required and can be modified or removed if desired. They will all
-be run automatically when using one of the deployment commands.
+## Prepare a version
 
-## Deploying a new alpha version
-
-```sh
-npm run alpha
-```
-
-This will create a prerelease version with an `@alpha` tag. It will then publish
-the package to npm and push the code and new tag. Users can install the package
-with `npm install @gilhrpenner/convex-files-control@alpha`.
-
-## Deploying a new release version
+Choose a version and prepare its package metadata and changelog in a normal PR:
 
 ```sh
-npm run release
+npm version 0.7.0 --no-git-tag-version --ignore-scripts
 ```
 
-This will create a patch version and publish as `latest`. It will then publish
-the package to npm and push the code and new tag. To publish a new minor or
-major version, you can run the commands manually:
+Add a nonempty `## 0.7.0 (YYYY-MM-DD)` section to `CHANGELOG.md`, then commit
+`package.json`, `package-lock.json`, and the changelog. The workflow extracts
+that section for GitHub release notes. Merge the PR after CI passes.
+
+Stable versions publish to `latest`. Prereleases must use `alpha.N`, `beta.N`,
+or `rc.N` (for example `0.7.0-beta.1`); they publish to the corresponding npm
+tag and become GitHub prereleases. They never update `latest`.
+
+## Run the release
+
+In Actions → **Release** → **Run workflow**, select **main**:
+
+1. Leave **dry_run** checked to validate and inspect the release artifact.
+2. Uncheck **dry_run** to publish the version already committed on main.
+
+Or use GitHub CLI:
 
 ```sh
-npm version minor # or major
-npm publish
-git push --follow-tags
+ gh workflow run release.yml --ref main -f dry_run=true
+ gh workflow run release.yml --ref main -f dry_run=false
 ```
 
-## Building a one-off package
+`npm run release:check` and `npm run release` dispatch these same commands.
+Neither changes your version nor publishes from your machine.
+
+An intentional push of a `v*` tag also starts the workflow. The tag must match
+the package version and point to a commit already on main.
+
+The workflow:
+
+1. Validates package identity, lockfile version, changelog, and source branch.
+2. Installs both lockfiles without a cache, then runs release guard tests, the
+   complete library/example checks, and production/high-severity audit gates.
+3. Packs once, checks required exports and excluded files, and stores the
+   tarball, SHA-512 integrity, SHA-256 checksum, package manifest, notes, and
+   logs as a GitHub Actions artifact.
+4. Creates an annotated version tag, or verifies an existing tag points to the
+   exact same source commit. It never moves a tag.
+5. Publishes that exact tarball using OIDC, with lifecycle scripts disabled and
+   provenance enabled. The publish job does not install project dependencies.
+6. Verifies npm's recorded integrity, then creates or publishes the GitHub
+   release with notes, the package, checksum, manifest, and validation log.
+   Existing curated draft notes are preserved.
+
+Dry runs perform steps 1–3 and report tag conflicts. They create no tags, GitHub
+releases, or npm versions and cannot prove OIDC authentication works. All
+release runs are serialized. Only the tagging and GitHub release jobs receive
+repository write access.
+
+## Retries and existing tags
+
+Use **Re-run failed jobs** on the original run. This retains the validated
+artifact and the original commit. If npm already accepted those exact bytes, the
+publish job skips publication and finishes the GitHub release. Registry outages
+and authentication errors are not treated as missing versions.
+
+If artifacts have expired, run the workflow against the exact version tag
+instead of the newer main branch. A rebuilt tarball must have the same npm
+integrity before an existing version can be reused. A published GitHub release
+is left unchanged. Never delete an npm version or move a published tag to fix a
+failed job; use a new version if the content differs.
+
+The prepared **v0.6.0** tag predates this workflow. Running a real release from
+new main will therefore stop at the tag guard. Before its first CI publish,
+choose explicitly between a new version/tag or recreating the still-unpublished
+v0.6.0 tag at the commit containing this workflow. The automation does not make
+that decision or change the existing tag. The draft's curated release notes will
+be preserved if v0.6.0 is intentionally aligned.
+
+## Local package inspection
+
+Use Node 24, install both lockfiles, and run the same packaging checks:
 
 ```sh
-npm run build:clean
-npm run build
-npm pack
+npm ci
+npm --prefix example ci
+VITE_CONVEX_URL=https://ci-placeholder.convex.cloud npm run check
+node --test scripts/release.test-node.mjs
+node scripts/release.mjs prepare
+node scripts/release.mjs pack
+node scripts/release.mjs verify
 ```
 
-You can then provide the .tgz file to others to install via
-`npm install ./path/to/your-package.tgz`.
+These commands create ignored files under `release/` and do not publish or
+modify Git tags. A local `npm publish` still runs the existing clean-build hook;
+the supported release path is GitHub Actions.

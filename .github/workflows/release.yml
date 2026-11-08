@@ -1,0 +1,181 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description:
+          Validate and package only (no tag, npm publish, or GitHub release)
+        type: boolean
+        default: true
+  push:
+    tags: ["v*"]
+
+# Serialize all versions and retries, including updates to npm's latest tag.
+concurrency:
+  group: npm-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    if: github.repository == 'gilhrpenner/convex-files-control'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      tag: ${{ steps.metadata.outputs.tag }}
+      filename: ${{ steps.metadata.outputs.filename }}
+      dist_tag: ${{ steps.metadata.outputs.distTag }}
+    env:
+      VITE_CONVEX_URL: https://ci-placeholder.convex.cloud
+    steps:
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Require main or a release tag from main
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" != refs/heads/main && "$GITHUB_REF" != refs/tags/v* ]]; then
+            echo "Releases must run from main or an existing release tag." >&2
+            exit 1
+          fi
+          git merge-base --is-ancestor HEAD origin/main
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6
+        with:
+          node-version: 24.16.0
+          package-manager-cache: false
+      - name: Prepare version and changelog notes
+        id: metadata
+        run: node scripts/release.mjs prepare
+      - name: Install locked dependencies
+        run: |
+          npm ci
+          npm --prefix example ci
+      - name: Validate library, example, release guards, and dependency security
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            node --test scripts/release.test-node.mjs
+            npm run check
+            npm audit --omit=dev
+            npm --prefix example audit --omit=dev
+            npm audit --audit-level=high
+            npm --prefix example audit --audit-level=high
+          } 2>&1 | tee release/validation.log
+      - name: Pack once and verify contents
+        run: |
+          node scripts/release.mjs pack
+          node scripts/release.mjs verify
+          node scripts/release.mjs preflight
+      - name: Verify the tag can be created or reused
+        if: github.event_name != 'workflow_dispatch' || !inputs.dry_run
+        run: node scripts/release.mjs check-tag
+      - name: Summarize dry run
+        if: github.event_name == 'workflow_dispatch' && inputs.dry_run
+        shell: bash
+        run: |
+          {
+            echo '## Dry run — nothing published'
+            echo 'Build, tests, audits, and package validation passed.'
+            if node scripts/release.mjs check-tag; then
+              echo 'The release tag is available or matches this commit.'
+            else
+              echo '**Release blocked:** the existing version tag points to a different commit. It was not changed.'
+            fi
+            echo 'npm OIDC authentication can only be verified by an actual publish after npm trust is configured.'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Retain release evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-${{ github.run_id }}
+          path: release/
+          if-no-files-found: error
+          retention-days: 30
+
+  tag:
+    needs: validate
+    if: github.event_name != 'workflow_dispatch' || !inputs.dry_run
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6
+        with:
+          node-version: 24.16.0
+          package-manager-cache: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-${{ github.run_id }}
+          path: release/
+      - name: Create annotated tag without moving existing tags
+        run: node scripts/release.mjs create-tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  publish:
+    needs: [validate, tag]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6
+        with:
+          node-version: 24.16.0
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - name: Use a pinned npm version with trusted publishing support
+        run: npm install --global npm@12.2.2 --ignore-scripts
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-${{ github.run_id }}
+          path: release/
+      - name: Check exact artifact and detect completed publishes
+        id: registry
+        run: node scripts/release.mjs registry
+      - name: Publish the validated tarball with OIDC and provenance
+        if: steps.registry.outputs.exists != 'true'
+        run:
+          npm publish "./release/${FILENAME}" --ignore-scripts --access public
+          --provenance --tag "$DIST_TAG"
+        env:
+          FILENAME: ${{ needs.validate.outputs.filename }}
+          DIST_TAG: ${{ needs.validate.outputs.dist_tag }}
+
+  github-release:
+    needs: [validate, publish]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6
+        with:
+          node-version: 24.16.0
+          package-manager-cache: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-${{ github.run_id }}
+          path: release/
+      - name: Verify npm and publish GitHub notes and artifacts
+        run: node scripts/release.mjs github-release
+        env:
+          GH_TOKEN: ${{ github.token }}

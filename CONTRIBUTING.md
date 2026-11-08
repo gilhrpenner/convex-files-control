@@ -35,3 +35,8 @@ and do not need cloud credentials.
 
 Dependency updates are grouped by Dependabot. Both lockfiles and the example
 checks must pass together. Renovate is disabled to avoid competing update PRs.
+
+Package releases use
+[GitHub Actions with npm trusted publishing](PUBLISHING.md). Prepare the version
+and changelog in a PR, then dispatch the Release workflow after merging. No npm
+publishing token or local release credentials are needed.
