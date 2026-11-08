@@ -36,6 +36,16 @@ and do not need cloud credentials.
 Dependency updates are grouped by Dependabot. Both lockfiles and the example
 checks must pass together. Renovate is disabled to avoid competing update PRs.
 
+Both projects use TypeScript 7 for `tsc` builds and typechecks. The
+`@typescript/native` dependency aliases `typescript@7`, while `typescript`
+aliases `@typescript/typescript6` to provide the compiler API required by
+typescript-eslint and other programmatic tooling. This follows Microsoft's
+[side-by-side migration guidance](https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/#running-side-by-side-with-typescript-6.0).
+Keep these aliases together when updating; replacing the API alias with a
+direct TypeScript 7 dependency breaks linting. Vitest and its coverage provider
+must also use matching versions, and ESLint/config upgrades must be validated
+together. Dependabot groups these coupled packages, including major updates.
+
 Package releases use
 [GitHub Actions with npm trusted publishing](PUBLISHING.md). Prepare the version
 and changelog in a PR, then dispatch the Release workflow after merging. No npm

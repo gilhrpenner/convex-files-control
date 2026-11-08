@@ -47,6 +47,45 @@ describe("shared helpers", () => {
     expect(isStorageProvider("other")).toBe(false);
   });
 
+  test("hashes async iterables without a reader API", async () => {
+    async function* chunks() {
+      yield new TextEncoder().encode("da");
+      yield new TextEncoder().encode("ta");
+    }
+    await expect(computeSha256Base64(chunks())).resolves.toEqual({
+      size: 4,
+      sha256: "Om6weQ85rIfJTzhWst0sXREOaBFgImGpqSPTuyOtyLc=",
+    });
+  });
+
+  test("hashes streams with only a reader API and releases the lock", async () => {
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("da"));
+        controller.enqueue(new TextEncoder().encode("ta"));
+        controller.close();
+      },
+    });
+    const readerOnly = { getReader: stream.getReader.bind(stream) };
+    await expect(computeSha256Base64(readerOnly)).resolves.toEqual({
+      size: 4,
+      sha256: "Om6weQ85rIfJTzhWst0sXREOaBFgImGpqSPTuyOtyLc=",
+    });
+    expect(stream.locked).toBe(false);
+  });
+
+  test("releases the reader lock when a stream fails", async () => {
+    const failure = new Error("stream failed");
+    const stream = new ReadableStream<Uint8Array>({
+      pull() {
+        throw failure;
+      },
+    });
+    const readerOnly = { getReader: stream.getReader.bind(stream) };
+    await expect(computeSha256Base64(readerOnly)).rejects.toBe(failure);
+    expect(stream.locked).toBe(false);
+  });
+
   test("computeSha256Base64 stays incremental when webcrypto globals exist", async () => {
     const digestSpy = vi.fn(async () => new Uint8Array(32).buffer);
     const originalSelf = (globalThis as Record<string, unknown>).self;

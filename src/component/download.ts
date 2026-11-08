@@ -285,7 +285,7 @@ async function consumeDownloadGrantCore(
     return { status: "file_expired" };
   }
 
-  let downloadUrl: string | null = null;
+  let downloadUrl: string | null;
   if (file.storageProvider === "convex") {
     downloadUrl = await ctx.storage.getUrl(toStorageId(grant.storageId));
   } else {
