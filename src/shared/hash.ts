@@ -1,6 +1,9 @@
 import { Sha256 } from "@aws-crypto/sha256-js";
 
-type ByteStream = AsyncIterable<Uint8Array> | ReadableStream<Uint8Array>;
+// Older stream implementations may expose a reader without async iteration.
+type ByteStream =
+  | AsyncIterable<Uint8Array>
+  | Pick<ReadableStream<Uint8Array>, "getReader">;
 
 export function bytesToBase64(bytes: Uint8Array): string {
   if (typeof Buffer !== "undefined") {

@@ -3,6 +3,7 @@
     "allowJs": true,
     "checkJs": true,
     "strict": true,
+    "types": ["node"],
 
     "target": "ESNext",
     "lib": ["ES2021", "dom", "DOM.Iterable"],

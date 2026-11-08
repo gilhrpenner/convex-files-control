@@ -163,7 +163,7 @@ export function useUploadFile<Api extends UploadApi>(
           : undefined,
       });
 
-      let payload: unknown = null;
+      let payload: unknown;
       try {
         payload = await uploadResponse.json();
       } catch {
