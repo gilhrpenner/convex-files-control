@@ -107,7 +107,7 @@
     "convex-test": "0.0.67",
     "eslint": "9.39.5",
     "eslint-plugin-react-hooks": "^7.1.1",
-    "eslint-plugin-react-refresh": "^0.4.26",
+    "eslint-plugin-react-refresh": "^0.5.7",
     "globals": "^16.5.0",
     "npm-run-all2": "8.0.4",
     "prettier": "3.9.10",
