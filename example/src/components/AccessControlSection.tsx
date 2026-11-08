@@ -1,3 +1,4 @@
+import { useNow } from "@/hooks/use-now";
 import * as React from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
@@ -17,12 +18,13 @@ import { Id } from "../../convex/_generated/dataModel";
 import { ExpirationDateInput } from "./ExpirationDateInput";
 
 export function AccessControlSection() {
+  const now = useNow();
   const allUploads = useQuery(api.files.listUserUploads, {}) ?? [];
   // Filter out expired files to prevent errors when trying to update them
   const uploads = allUploads.filter(
-    (u) => u.expiresAt == null || u.expiresAt > Date.now()
+    (u) => u.expiresAt == null || u.expiresAt > now,
   );
-  const [selectedFileId, setSelectedFileId] = React.useState<string>("");
+  const [requestedFileId, setSelectedFileId] = React.useState<string>("");
   const [newAccessKey, setNewAccessKey] = React.useState("");
   const [isSubmitting, setIsSubmitting] = React.useState(false);
 
@@ -30,28 +32,25 @@ export function AccessControlSection() {
   const removeKey = useMutation(api.files.removeAccessKey);
   const updateExpiration = useMutation(api.files.updateFileExpiration);
 
-  // Automatically select first file
-  React.useEffect(() => {
-    if (!selectedFileId && uploads.length > 0) {
-      setSelectedFileId(uploads[0]._id);
-    }
-  }, [uploads, selectedFileId]);
+  const selectedFileId = uploads.some((file) => file._id === requestedFileId)
+    ? requestedFileId
+    : (uploads[0]?._id ?? "");
 
   const selectedFile = uploads.find((u) => u._id === selectedFileId);
-  
+
   // Fetch access keys for selected file
   const accessKeys = useQuery(
-    api.files.listAccessKeys, 
-    selectedFileId ? { _id: selectedFileId as Id<"filesUploads"> } : "skip"
+    api.files.listAccessKeys,
+    selectedFileId ? { _id: selectedFileId as Id<"filesUploads"> } : "skip",
   );
 
   const handleAddKey = async () => {
     if (!selectedFileId || !newAccessKey) return;
     setIsSubmitting(true);
     try {
-      await addKey({ 
-        _id: selectedFileId as Id<"filesUploads">, 
-        accessKey: newAccessKey 
+      await addKey({
+        _id: selectedFileId as Id<"filesUploads">,
+        accessKey: newAccessKey,
       });
       setNewAccessKey("");
     } catch (error) {
@@ -66,9 +65,9 @@ export function AccessControlSection() {
     if (!selectedFileId) return;
     if (!confirm(`Revoke access for key "${key}"?`)) return;
     try {
-      await removeKey({ 
-        _id: selectedFileId as Id<"filesUploads">, 
-        accessKey: key 
+      await removeKey({
+        _id: selectedFileId as Id<"filesUploads">,
+        accessKey: key,
       });
     } catch (error) {
       console.error(error);
@@ -97,13 +96,10 @@ export function AccessControlSection() {
             <Shield className="h-5 w-5 text-primary" />
             Access Control
           </h2>
-          
+
           <div className="space-y-2">
             <Label>Manage Access For</Label>
-            <Select 
-              value={selectedFileId} 
-              onValueChange={setSelectedFileId}
-            >
+            <Select value={selectedFileId} onValueChange={setSelectedFileId}>
               <SelectTrigger className="w-full bg-white/5 border-white/10 hover:bg-white/10">
                 <SelectValue placeholder="Select a file" />
               </SelectTrigger>
@@ -122,18 +118,22 @@ export function AccessControlSection() {
               <div className="space-y-3">
                 <Label>Add Access Key</Label>
                 <div className="flex gap-2">
-                  <Input 
-                    placeholder="User ID, Email, or Tenant ID" 
+                  <Input
+                    placeholder="User ID, Email, or Tenant ID"
                     value={newAccessKey}
                     onChange={(e) => setNewAccessKey(e.target.value)}
                     className="bg-white/5 border-white/10"
                   />
-                  <Button 
-                    size="icon" 
+                  <Button
+                    size="icon"
                     disabled={!newAccessKey || isSubmitting}
                     onClick={() => void handleAddKey()}
                   >
-                    {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                    {isSubmitting ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Plus className="h-4 w-4" />
+                    )}
                   </Button>
                 </div>
               </div>
@@ -141,17 +141,31 @@ export function AccessControlSection() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <Label>Current Access Keys</Label>
-                  <span className="text-xs text-muted-foreground">{accessKeys?.length ?? 0} active</span>
+                  <span className="text-xs text-muted-foreground">
+                    {accessKeys?.length ?? 0} active
+                  </span>
                 </div>
                 <div className="rounded-md border border-white/10 bg-black/20 p-2 space-y-2 max-h-[150px] overflow-y-auto">
                   {!accessKeys ? (
-                    <div className="p-2 text-center"><Loader2 className="h-4 w-4 animate-spin mx-auto opacity-50" /></div>
+                    <div className="p-2 text-center">
+                      <Loader2 className="h-4 w-4 animate-spin mx-auto opacity-50" />
+                    </div>
                   ) : accessKeys.length === 0 ? (
-                    <div className="text-xs text-muted-foreground text-center py-2">No keys found</div>
+                    <div className="text-xs text-muted-foreground text-center py-2">
+                      No keys found
+                    </div>
                   ) : (
                     accessKeys.map((key) => (
-                      <div key={key} className="flex items-center justify-between text-sm p-2 rounded hover:bg-white/5 group">
-                        <span className="font-mono text-xs truncate max-w-[180px]" title={key}>{key}</span>
+                      <div
+                        key={key}
+                        className="flex items-center justify-between text-sm p-2 rounded hover:bg-white/5 group"
+                      >
+                        <span
+                          className="font-mono text-xs truncate max-w-[180px]"
+                          title={key}
+                        >
+                          {key}
+                        </span>
                         <Button
                           variant="ghost"
                           size="icon"
@@ -171,9 +185,13 @@ export function AccessControlSection() {
                   <Clock className="h-4 w-4 text-muted-foreground" />
                   <Label>Update Expiration</Label>
                 </div>
-                <ExpirationDateInput 
-                  initialDate={selectedFile.expiresAt ? new Date(selectedFile.expiresAt) : null}
-                  onDateChange={(date) => void handleUpdateExpiration(date)} 
+                <ExpirationDateInput
+                  initialDate={
+                    selectedFile.expiresAt
+                      ? new Date(selectedFile.expiresAt)
+                      : null
+                  }
+                  onDateChange={(date) => void handleUpdateExpiration(date)}
                 />
               </div>
             </div>
@@ -184,26 +202,28 @@ export function AccessControlSection() {
       <div className="md:col-span-2">
         <DocumentationPanel title="Granular Access Control">
           <p>
-            The <code>accessControl</code> module manages who can access your files. 
-            Files are not inherently public; they require a valid access key or a download grant.
+            The <code>accessControl</code> module manages who can access your
+            files. Files are not inherently public; they require a valid access
+            key or a download grant.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-             <div>
-               <h4 className="text-foreground font-medium mb-1">Access Keys</h4>
-               <p className="text-xs">
-                 Strings attached to a file record. A user must present a matching key 
-                 (e.g., their User ID) to download the file directly via the file's storage ID. 
-                 Multiple keys allow sharing across users or tenants.
-               </p>
-             </div>
-             <div>
-               <h4 className="text-foreground font-medium mb-1">Expiration</h4>
-               <p className="text-xs">
-                 Files can be scheduled for auto-deletion. Adding an expiration date
-                 updates the internal <code>expiresAt</code> field. The background cron job
-                 permanently deletes expired files.
-               </p>
-             </div>
+            <div>
+              <h4 className="text-foreground font-medium mb-1">Access Keys</h4>
+              <p className="text-xs">
+                Strings attached to a file record. A user must present a
+                matching key (e.g., their User ID) to download the file directly
+                via the file's storage ID. Multiple keys allow sharing across
+                users or tenants.
+              </p>
+            </div>
+            <div>
+              <h4 className="text-foreground font-medium mb-1">Expiration</h4>
+              <p className="text-xs">
+                Files can be scheduled for auto-deletion. Adding an expiration
+                date updates the internal <code>expiresAt</code> field. The
+                background cron job permanently deletes expired files.
+              </p>
+            </div>
           </div>
         </DocumentationPanel>
       </div>

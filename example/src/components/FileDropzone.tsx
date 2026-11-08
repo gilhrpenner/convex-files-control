@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import * as React from "react";
 import { useDropzone } from "react-dropzone";
 import { UploadCloud, Trash2, FileIcon } from "lucide-react";
@@ -17,12 +18,16 @@ export interface FileItem {
   name: string;
 }
 
-export function FileDropzone({ files: externalFiles, onFilesUpdated, className }: FileDropzoneProps) {
+export function FileDropzone({
+  files: externalFiles,
+  onFilesUpdated,
+  className,
+}: FileDropzoneProps) {
   const [internalFiles, setInternalFiles] = React.useState<FileItem[]>([]);
-  
+
   // Use external files if provided (controlled mode), otherwise use internal state
   const files = externalFiles ?? internalFiles;
-  
+
   const updateFiles = (newFiles: FileItem[]) => {
     if (externalFiles === undefined) {
       setInternalFiles(newFiles);
@@ -41,11 +46,15 @@ export function FileDropzone({ files: externalFiles, onFilesUpdated, className }
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    maxSize: 15 * 1024 * 1024, // 15MB
+    maxSize: 5 * 1024 * 1024,
+    onDropRejected: () =>
+      toast.error("Demo limit: Files must be 5MB or smaller."),
   });
 
   const handleNameChange = (id: string, newName: string) => {
-    const updated = files.map((item) => (item.id === id ? { ...item, name: newName } : item));
+    const updated = files.map((item) =>
+      item.id === id ? { ...item, name: newName } : item,
+    );
     updateFiles(updated);
   };
 
@@ -69,7 +78,7 @@ export function FileDropzone({ files: externalFiles, onFilesUpdated, className }
         className={cn(
           "flex min-h-[200px] cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-white/20 bg-white/5 px-4 py-8 text-center transition-colors hover:border-primary/50 hover:bg-white/10",
           isDragActive && "border-primary bg-primary/10",
-          className
+          className,
         )}
       >
         <input {...getInputProps()} />
@@ -81,7 +90,7 @@ export function FileDropzone({ files: externalFiles, onFilesUpdated, className }
             Click to upload or drag and drop
           </p>
           <p className="text-xs text-muted-foreground">
-            SVG, PNG, JPG or GIF (max 5MB)
+            Any file type (max 5MB)
           </p>
         </div>
       </div>
@@ -93,17 +102,19 @@ export function FileDropzone({ files: externalFiles, onFilesUpdated, className }
               key={item.id}
               className="flex items-center gap-3 rounded-md bg-white/5 p-2 ring-1 ring-white/10"
             >
-               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-background/50">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-background/50">
                 <FileIcon className="h-5 w-5 text-primary" />
               </div>
-              
+
               <div className="flex-1 min-w-0 grid gap-1">
-                 <Input 
-                    value={item.name}
-                    onChange={(e) => handleNameChange(item.id, e.target.value)}
-                    className="h-7 text-sm bg-transparent border-transparent hover:bg-white/5 hover:border-white/10 focus:bg-background focus:border-primary px-1 transition-colors"
-                 />
-                 <p className="text-xs text-muted-foreground px-1">{formatSize(item.file.size)}</p>
+                <Input
+                  value={item.name}
+                  onChange={(e) => handleNameChange(item.id, e.target.value)}
+                  className="h-7 text-sm bg-transparent border-transparent hover:bg-white/5 hover:border-white/10 focus:bg-background focus:border-primary px-1 transition-colors"
+                />
+                <p className="text-xs text-muted-foreground px-1">
+                  {formatSize(item.file.size)}
+                </p>
               </div>
 
               <Button

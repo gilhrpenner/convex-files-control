@@ -1,5 +1,9 @@
 # Publishing
 
+Use Node 24. Before releasing, install both projects (`npm ci` and
+`npm --prefix example ci`) and run `npm run check`. See
+[example/DEPLOY.md](example/DEPLOY.md) to publish the demo separately.
+
 In order for other people to install and use this component, you can publish the
 package to npm.
 
@@ -13,7 +17,7 @@ If this is your first time, here are the recommended steps:
    latter, ensure you have an npmjs account with permissions to push to
    `my-org`.
 2. `npm login` to login to npmjs.
-3. `npm run clean` to clean your `/dist` directory.
+3. `npm run build:clean` to clean your `/dist` directory.
 4. `npm ci` to install the dependencies with the versions specified in
    `package-lock.json`.
 5. `npm run build` to build the package fresh.
@@ -54,7 +58,7 @@ npm run alpha
 
 This will create a prerelease version with an `@alpha` tag. It will then publish
 the package to npm and push the code and new tag. Users can install the package
-with `npm install @your-package@alpha`.
+with `npm install @gilhrpenner/convex-files-control@alpha`.
 
 ## Deploying a new release version
 
@@ -75,7 +79,7 @@ git push --follow-tags
 ## Building a one-off package
 
 ```sh
-npm run clean
+npm run build:clean
 npm run build
 npm pack
 ```

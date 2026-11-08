@@ -13,6 +13,7 @@ import type * as crons from "../crons.js";
 import type * as files from "../files.js";
 import type * as http from "../http.js";
 import type * as r2Config from "../r2Config.js";
+import type * as seed from "../seed.js";
 import type * as users from "../users.js";
 
 import type {
@@ -27,6 +28,7 @@ declare const fullApi: ApiFromModules<{
   files: typeof files;
   http: typeof http;
   r2Config: typeof r2Config;
+  seed: typeof seed;
   users: typeof users;
 }>;
 

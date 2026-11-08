@@ -1,7 +1,13 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
 import { api, components } from "./_generated/api.js";
-import { action, internalMutation, mutation, query, type MutationCtx } from "./_generated/server.js";
+import {
+  action,
+  internalMutation,
+  mutation,
+  query,
+  type MutationCtx,
+} from "./_generated/server.js";
 import type { Id } from "./_generated/dataModel.js";
 import { getR2ConfigFromEnv } from "./r2Config.js";
 
@@ -109,7 +115,7 @@ export const finalizeUpload = mutation({
     // Demo limit: Check file size (5MB max)
     if (args.metadata?.size && args.metadata.size > DEMO_MAX_FILE_SIZE_BYTES) {
       throw new ConvexError(
-        `Demo limit: File size exceeds 5MB. Your file is ${(args.metadata.size / (1024 * 1024)).toFixed(2)}MB.`
+        `Demo limit: File size exceeds 5MB. Your file is ${(args.metadata.size / (1024 * 1024)).toFixed(2)}MB.`,
       );
     }
 
@@ -146,8 +152,9 @@ export const finalizeUpload = mutation({
   },
 });
 
-export const recordUpload = mutation({
+export const recordUpload = internalMutation({
   args: {
+    userId: v.id("users"),
     storageId: v.string(),
     storageProvider: v.union(v.literal("convex"), v.literal("r2")),
     fileName: v.string(),
@@ -163,13 +170,19 @@ export const recordUpload = mutation({
       v.null(),
     ),
   },
+  returns: v.null(),
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) {
-      throw new ConvexError("User is not authenticated.");
-    }
-
-    await insertUploadRecord(ctx, { userId, ...args });
+    const expiresAt = enforceDemoExpiration(args.expiresAt);
+    // Keep the component TTL in sync, so cleanup also deletes the stored object.
+    await ctx.runMutation(
+      components.convexFilesControl.accessControl.updateFileExpiration,
+      {
+        storageId: args.storageId,
+        expiresAt,
+      },
+    );
+    await insertUploadRecord(ctx, { ...args, expiresAt });
+    return null;
   },
 });
 
@@ -213,13 +226,10 @@ export const deleteFile = mutation({
 
     // Delete from the component's database and storage provider
     const r2Config = getR2ConfigFromEnv();
-    await ctx.runMutation(
-      components.convexFilesControl.cleanUp.deleteFile,
-      {
-        storageId: file.storageId,
-        r2Config: r2Config ?? undefined,
-      },
-    );
+    await ctx.runMutation(components.convexFilesControl.cleanUp.deleteFile, {
+      storageId: file.storageId,
+      r2Config: r2Config ?? undefined,
+    });
   },
 });
 
@@ -242,7 +252,9 @@ export const getFileDownloadUrl = mutation({
       throw new ConvexError("File not found.");
     }
     if (file.userId !== userId) {
-      throw new ConvexError("You do not have permission to download this file.");
+      throw new ConvexError(
+        "You do not have permission to download this file.",
+      );
     }
 
     // Create a single-use download grant
@@ -344,7 +356,10 @@ export const transferFile = action({
     storageProvider: v.union(v.literal("convex"), v.literal("r2")),
     virtualPath: v.union(v.string(), v.null()),
   }),
-  handler: async (ctx, args): Promise<{
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
     storageId: string;
     storageProvider: "convex" | "r2";
     virtualPath: string | null;
@@ -359,7 +374,9 @@ export const transferFile = action({
       throw new ConvexError("File not found.");
     }
     if (file.userId !== userId) {
-      throw new ConvexError("You do not have permission to transfer this file.");
+      throw new ConvexError(
+        "You do not have permission to transfer this file.",
+      );
     }
 
     const r2Config = getR2ConfigFromEnv();
@@ -698,10 +715,14 @@ export const cleanupExpiredFiles = internalMutation({
     // Clean up expired files from our local filesUploads table
     const expiredLocalFiles = await ctx.db
       .query("filesUploads")
-      .withIndex("by_expiresAt", (q) => q.gt("expiresAt", 0).lte("expiresAt", now))
+      .withIndex("by_expiresAt", (q) =>
+        q.gt("expiresAt", 0).lte("expiresAt", now),
+      )
       .take(limit);
 
-    await Promise.all(expiredLocalFiles.map((f) => ctx.db.delete("filesUploads", f._id)));
+    await Promise.all(
+      expiredLocalFiles.map((f) => ctx.db.delete("filesUploads", f._id)),
+    );
 
     // Call the component's cleanup to delete from component DB and storage
     const r2Config = getR2ConfigFromEnv();

@@ -1,18 +1,37 @@
-# Developing guide
+# Developing Convex Files Control
 
-## Running locally
-
-```sh
-npm i
-npm run dev
-```
-
-## Testing
+Use Node 24 (`nvm use`); CI also checks Node 22.12+. The library and example
+have separate lockfiles. From the repository root:
 
 ```sh
 npm ci
-npm run clean
-npm run typecheck
-npm run lint
-npm run test
+npm --prefix example ci
+npm run check
 ```
+
+`check` builds the package, typechecks and lints the library and example, runs
+the unit/integration suite, verifies ESM exports, and builds the demo. For an
+offline build without a configured backend, set
+`VITE_CONVEX_URL=https://ci-placeholder.convex.cloud` (a build-only
+placeholder). Do not use that URL for an interactive demo.
+
+For coverage and a publish-content inspection:
+
+```sh
+npm run test:coverage
+npm pack --dry-run
+npm audit
+npm --prefix example audit
+```
+
+See [example/README.md](example/README.md) for backend/auth setup and local
+usage, and [example/DEPLOY.md](example/DEPLOY.md) for deployment. Run all Convex
+CLI commands from the repository root; `convex.json` points to `example/convex`.
+
+`npm run dev` watches the library, Convex backend, and Vite frontend.
+`npm run build:codegen` regenerates component bindings and builds the library;
+it requires Convex access. Normal builds and CI use committed generated bindings
+and do not need cloud credentials.
+
+Dependency updates are grouped by Dependabot. Both lockfiles and the example
+checks must pass together. Renovate is disabled to avoid competing update PRs.

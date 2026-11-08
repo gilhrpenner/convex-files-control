@@ -1,0 +1,34 @@
+
+ RUN  v4.1.12 <repository>
+
+ ❯ src/__tests__/react.test.ts (9 tests | 1 failed) 11ms
+     × http upload sends form data and returns payload 3ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/__tests__/react.test.ts > useUploadFile > http upload sends form data and returns payload
+AssertionError: expected null to be '/tenant/http.txt' // Object.is equality
+
+- Expected:
+"/tenant/http.txt"
+
++ Received:
+null
+
+ ❯ src/__tests__/react.test.ts:264:54
+    262|       expect(form.get(uploadFormFields.provider)).toBe("convex");
+    263|       expect(form.get(uploadFormFields.expiresAt)).toBe("null");
+    264|       expect(form.get(uploadFormFields.virtualPath)).toBe("/tenant/htt…
+       |                                                      ^
+    265|       expect(init?.headers).toEqual({
+    266|         Authorization: "Bearer token",
+ ❯ src/react/index.ts:154:36
+ ❯ src/__tests__/react.test.ts:272:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 8 passed (9)
+   Start at  10:56:08
+   Duration  163ms (transform 37ms, setup 0ms, import 50ms, tests 11ms, environment 27ms)

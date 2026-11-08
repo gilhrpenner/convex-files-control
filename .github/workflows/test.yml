@@ -7,32 +7,58 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: ["**"]
+
+permissions:
+  contents: read
 
 jobs:
   check:
-    name: Test and lint
+    name: Package and example (Node ${{ matrix.node }})
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        node: [22, 24]
+    env:
+      # Build-only origins: CI never connects to or deploys the public demo.
+      VITE_CONVEX_URL: https://ci-placeholder.convex.cloud
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6
-
-      - name: Node setup
-        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6
         with:
-          cache-dependency-path: package.json
-          node-version: "24.x"
-          cache: "npm"
-
-      - name: Install and build
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            example/package-lock.json
+      - name: Install from both lockfiles
         run: |
-          npm i
-          npm run build
-      - name: Publish package for testing branch
-        run: npx pkg-pr-new publish || echo "Have you set up pkg-pr-new for this repo?"
-      - name: Test
+          npm ci
+          npm --prefix example ci
+      - name: Build, typecheck, lint, test, and check ESM exports
+        shell: bash
         run: |
-          npm run test
-          npm run typecheck
-          npm run lint
+          set -o pipefail
+          mkdir -p evidence
+          npm run check 2>&1 | tee evidence/check.log
+      - name: Coverage and package contents
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run test:coverage 2>&1 | tee evidence/coverage.log
+          npm pack --dry-run --json > evidence/package.json
+      - name: Dependency security gate
+        shell: bash
+        run: |
+          npm audit --json > evidence/root-audit.json || true
+          npm --prefix example audit --json > evidence/example-audit.json || true
+          npm audit --omit=dev
+          npm --prefix example audit --omit=dev
+          npm audit --audit-level=high
+          npm --prefix example audit --audit-level=high
+      - name: Upload validation evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: validation-node-${{ matrix.node }}
+          path: evidence/

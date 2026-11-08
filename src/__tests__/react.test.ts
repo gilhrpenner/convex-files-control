@@ -261,6 +261,7 @@ describe("useUploadFile", () => {
       // Note: accessKeys is NOT in form - it's added server-side via checkUploadRequest hook
       expect(form.get(uploadFormFields.provider)).toBe("convex");
       expect(form.get(uploadFormFields.expiresAt)).toBe("null");
+      expect(form.get(uploadFormFields.virtualPath)).toBe("/tenant/http.txt");
       expect(init?.headers).toEqual({
         Authorization: "Bearer token",
       });
@@ -271,6 +272,7 @@ describe("useUploadFile", () => {
     const result = await uploadViaHttpAction({
       file: new File(["data"], "file.txt"),
       expiresAt: null,
+      virtualPath: "/tenant/http.txt",
       http: {
         baseUrl: "https://example.com",
         pathPrefix: "/files",

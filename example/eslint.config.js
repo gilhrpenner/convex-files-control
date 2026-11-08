@@ -77,4 +77,9 @@ export default defineConfig([
     },
   },
   ...convexPlugin.configs.recommended,
+  {
+    files: ["src/components/ui/**/*.{ts,tsx}"],
+    // shadcn primitives intentionally co-locate exported variants and hooks.
+    rules: { "react-refresh/only-export-components": "off" },
+  },
 ]);

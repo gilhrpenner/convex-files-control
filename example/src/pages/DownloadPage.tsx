@@ -1,9 +1,16 @@
+import { convexSiteUrl } from "@/lib/convex";
 import * as React from "react";
 import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Loader2, Download, Lock, AlertCircle } from "lucide-react";
 import { useAuthToken } from "@convex-dev/auth/react";
 
@@ -11,7 +18,7 @@ export function DownloadPage() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get("token");
   const filename = searchParams.get("filename") ?? "download";
-  
+
   const [password, setPassword] = React.useState("");
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -21,73 +28,74 @@ export function DownloadPage() {
   // Get auth token to include in download request
   const authToken = useAuthToken();
 
-  const convexSiteUrl = React.useMemo(
-    () => (import.meta.env.VITE_CONVEX_URL || "https://intent-tiger-143.convex.cloud").replace(".cloud", ".site"),
-    [],
-  );
-
-  const attemptDownload = React.useCallback(async (passwordToUse?: string) => {
-    if (!token) {
-      setError("Invalid download link");
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    setHasAttempted(true);
-
-    try {
-      const params = new URLSearchParams({ token, filename });
-      if (passwordToUse) {
-        params.set("password", passwordToUse);
+  const attemptDownload = React.useCallback(
+    async (passwordToUse?: string) => {
+      if (!token) {
+        setError("Invalid download link");
+        return;
       }
 
-      // Build headers - include auth token if available
-      const headers: HeadersInit = {};
-      if (authToken) {
-        headers["Authorization"] = `Bearer ${authToken}`;
-      }
+      setLoading(true);
+      setError(null);
+      setHasAttempted(true);
 
-      const response = await fetch(`${convexSiteUrl}/files/download?${params}`, {
-        headers,
-        credentials: "include", // Include cookies for auth
-      });
-      
-      if (response.ok) {
-        // Success - trigger download
-        const blob = await response.blob();
-        const blobUrl = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = blobUrl;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(blobUrl);
-        setError(null);
-      } else {
-        const data = await response.json().catch(() => ({}));
-        
-        if (response.status === 401) {
-          // Password required
-          setNeedsPassword(true);
-          if (passwordToUse) {
-            setError("Incorrect password");
-          }
-        } else if (response.status === 403) {
-          setError("Access denied - you may need to sign in first");
-        } else if (response.status === 410) {
-          setError("This link has expired or been used too many times");
-        } else {
-          setError(data.error || "Download failed");
+      try {
+        const params = new URLSearchParams({ token, filename });
+        if (passwordToUse) {
+          params.set("password", passwordToUse);
         }
+
+        // Build headers - include auth token if available
+        const headers: HeadersInit = {};
+        if (authToken) {
+          headers["Authorization"] = `Bearer ${authToken}`;
+        }
+
+        const response = await fetch(
+          `${convexSiteUrl}/files/download?${params}`,
+          {
+            headers,
+            credentials: "include", // Include cookies for auth
+          },
+        );
+
+        if (response.ok) {
+          // Success - trigger download
+          const blob = await response.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = blobUrl;
+          link.download = filename;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(blobUrl);
+          setError(null);
+        } else {
+          const data = await response.json().catch(() => ({}));
+
+          if (response.status === 401) {
+            // Password required
+            setNeedsPassword(true);
+            if (passwordToUse) {
+              setError("Incorrect password");
+            }
+          } else if (response.status === 403) {
+            setError("Access denied - you may need to sign in first");
+          } else if (response.status === 410) {
+            setError("This link has expired or been used too many times");
+          } else {
+            setError(data.error || "Download failed");
+          }
+        }
+      } catch {
+        setError("Network error - please try again");
+      } finally {
+        setLoading(false);
       }
-    } catch {
-      setError("Network error - please try again");
-    } finally {
-      setLoading(false);
-    }
-  }, [token, filename, convexSiteUrl, authToken]);
+    },
+    [token, filename, authToken],
+  );
 
   // Try to download on mount, but wait a moment for auth to settle
   // For public links this will work immediately; for non-public links
@@ -118,7 +126,9 @@ export function DownloadPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-muted-foreground">This download link is invalid or malformed.</p>
+            <p className="text-muted-foreground">
+              This download link is invalid or malformed.
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -173,10 +183,12 @@ export function DownloadPage() {
                   autoFocus
                 />
               </div>
-              {error && (
-                <p className="text-sm text-destructive">{error}</p>
-              )}
-              <Button type="submit" className="w-full" disabled={loading || !password}>
+              {error && <p className="text-sm text-destructive">{error}</p>}
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={loading || !password}
+              >
                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Download
               </Button>
@@ -184,12 +196,18 @@ export function DownloadPage() {
           ) : error ? (
             <div className="space-y-4">
               <p className="text-muted-foreground">{error}</p>
-              <Button onClick={() => void attemptDownload()} variant="outline" className="w-full">
+              <Button
+                onClick={() => void attemptDownload()}
+                variant="outline"
+                className="w-full"
+              >
                 Try Again
               </Button>
             </div>
           ) : (
-            <p className="text-muted-foreground">Your download should start automatically...</p>
+            <p className="text-muted-foreground">
+              Your download should start automatically...
+            </p>
           )}
         </CardContent>
       </Card>

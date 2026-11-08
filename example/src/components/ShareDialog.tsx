@@ -52,7 +52,11 @@ export function ShareDialog({ fileId, fileName, disabled }: ShareDialogProps) {
 
       // Construct the download URL - points to frontend download page
       // The download page will handle password prompts if needed
-      const url = `${window.location.origin}/download?token=${result.downloadToken}`;
+      const params = new URLSearchParams({
+        token: result.downloadToken,
+        filename: fileName,
+      });
+      const url = `${window.location.origin}/download?${params}`;
       setGeneratedUrl(url);
     } catch (error) {
       console.error("Failed to generate link:", error);
@@ -75,10 +79,16 @@ export function ShareDialog({ fileId, fileName, disabled }: ShareDialogProps) {
     setMaxUses("1");
     setPassword("");
     setExpiresAt(null);
-  }
+  };
 
   return (
-    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) reset(); }}>
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        setOpen(v);
+        if (!v) reset();
+      }}
+    >
       <DialogTrigger asChild>
         <Button
           variant="ghost"
@@ -170,20 +180,31 @@ export function ShareDialog({ fileId, fileName, disabled }: ShareDialogProps) {
               </Button>
             </div>
             <div className="bg-muted/50 p-3 rounded-md text-xs text-muted-foreground">
-              <p>This link will work until the max uses are reached or it expires.</p>
-              {!isPublic && <p className="mt-1 text-yellow-500">Note: Since "Public Link" was off, users must be logged in to use this link.</p>}
+              <p>
+                This link will work until the max uses are reached or it
+                expires.
+              </p>
+              {!isPublic && (
+                <p className="mt-1 text-yellow-500">
+                  Note: Since "Public Link" was off, users must be logged in to
+                  use this link.
+                </p>
+              )}
             </div>
           </div>
         )}
 
         <DialogFooter>
           {!generatedUrl ? (
-            <Button onClick={() => void handleGenerateValues()} disabled={loading}>
+            <Button
+              onClick={() => void handleGenerateValues()}
+              disabled={loading}
+            >
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Generate Link
             </Button>
           ) : (
-             <Button variant="ghost" onClick={reset}>
+            <Button variant="ghost" onClick={reset}>
               <RefreshCw className="mr-2 h-4 w-4" />
               Generate New
             </Button>

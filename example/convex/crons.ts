@@ -17,7 +17,7 @@ const crons = cronJobs();
 
 crons.hourly(
   "cleanup-expired-files",
-  { minuteUTC: 0 },
+  { minuteUTC: 17 },
   internal.files.cleanupExpiredFiles,
   {},
 );

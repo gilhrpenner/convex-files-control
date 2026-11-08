@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- Update Convex to 1.49, helpers to 0.1.134, action retrier to 0.3.1, Convex
+  Test to 0.0.67, and both dependency lockfiles. The library now requires Convex
+  1.46+ (helpers peer requirement) and Node 22.12+.
+- Preserve virtual paths in React HTTP uploads.
+- Repair example installs, HTTP size/expiration enforcement, upload feedback,
+  deployment URL selection, share filenames, and local setup documentation.
+- Validate both projects in CI, retain check/audit artifacts, and exclude tests
+  from the published package.
+
 ## 0.5.9 (2026-09-23)
 
 ### Fixes
@@ -55,8 +66,8 @@
 ### Fixes
 
 - **types**: Accept Convex action contexts in `FilesControl` query and mutation
-  helpers with Convex 1.41.0 by typing helper contexts against the shared
-  action `runQuery`/`runMutation` signatures.
+  helpers with Convex 1.41.0 by typing helper contexts against the shared action
+  `runQuery`/`runMutation` signatures.
 - **tests**: Add server context type coverage and bump the Convex dev dependency
   to 1.41.0 so local checks exercise the updated Convex ctx signatures.
 
@@ -82,8 +93,8 @@
 
 - Refresh package dependencies, including AWS SDK S3 packages, Convex helpers,
   React dev dependencies, Vitest, Prettier, and package publishing tooling.
-- Apply dependency security updates for Vite and transitive packages reported
-  by Dependabot, with a temporary `ws` override while Convex still pins the
+- Apply dependency security updates for Vite and transitive packages reported by
+  Dependabot, with a temporary `ws` override while Convex still pins the
   vulnerable release.
 
 ---
@@ -103,8 +114,8 @@
 ### Fixes
 
 - **esm**: Fix published ESM entrypoints and internal runtime modules to use
-  explicit `.js` relative imports, including the shared hash export path used
-  by streaming hash support, so the package loads correctly in strict ESM
+  explicit `.js` relative imports, including the shared hash export path used by
+  streaming hash support, so the package loads correctly in strict ESM
   environments such as Node.js and Vitest.
 - **build**: Enforce Node-style module resolution for the publish build and
   validate built `dist` entrypoints before release to prevent ESM packaging

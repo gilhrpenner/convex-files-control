@@ -1,0 +1,7 @@
+▌ Developing against deployment:
+▌ [Development] purple-law:convex-files-control:dev/gil-penner (dev) (dashboard: https://dashboard.convex.dev/t/purple-law/convex-files-control/proficient-vulture-369)
+▌ └─ https://proficient-vulture-369.convex.cloud
+- Preparing Convex functions...
+
+Convex AI files are not installed. Run npx convex ai-files install to get started or npx convex ai-files disable to hide this message.
+✔ 10:59:06 Convex functions ready! (2.81s)

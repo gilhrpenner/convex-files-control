@@ -1,0 +1,3 @@
+PASS: packed client and React ESM exports load with Convex 1.46.0 and React 18.3.1
+Client exports: FilesControl, buildDownloadUrl, registerRoutes, uploadFormFields
+Convex component configuration is tested by the real Convex dev push, not bare Node.
